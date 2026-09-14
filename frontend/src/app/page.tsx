@@ -272,7 +272,7 @@ export default function DashboardPage() {
               title="Upload New Agreement or Document"
             >
               <Upload className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Upload PDF</span>
+              <span className="hidden sm:inline">Upload Contract</span>
             </button>
             
             {/* Ultra-Clean User Profile Pill */}

@@ -108,7 +108,7 @@ def _compute_document_hash(file_path: Optional[Path], chunks: list) -> str:
         return hashlib.sha256(file_path.read_bytes()).hexdigest()
     return ""
 
-def _get_or_create_audit(doc_id: str, filename: str, chunks: list, file_path: Optional[Path] = None) -> ContractAuditReport:
+def _get_or_create_audit(doc_id: str, filename: str, chunks: list, file_path: Optional[Path] = None, force_refresh: bool = False) -> ContractAuditReport:
     """
     Returns cached audit report if an identical contract content hash was already audited,
     guaranteeing 100% score consistency across duplicate uploads. Otherwise runs AI audit.
@@ -116,21 +116,24 @@ def _get_or_create_audit(doc_id: str, filename: str, chunks: list, file_path: Op
     content_hash = _compute_document_hash(file_path, chunks)
     hash_cache = _load_hash_cache()
 
-    if content_hash and content_hash in hash_cache:
+    if not force_refresh and content_hash and content_hash in hash_cache:
         cached_data = dict(hash_cache[content_hash])
-        cached_data["doc_id"] = doc_id
-        cached_data["filename"] = filename
-        cached_data["audit_timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        report = ContractAuditReport(**cached_data)
-        
-        audits_dict = _load_audits()
-        audits_dict[doc_id] = report.model_dump()
-        _save_audits(audits_dict)
-        return report
+        # Never serve cached mock fallback audits
+        if cached_data.get("key_parties") != ["Party 1", "Party 2"]:
+            cached_data["doc_id"] = doc_id
+            cached_data["filename"] = filename
+            cached_data["audit_timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            report = ContractAuditReport(**cached_data)
+            
+            audits_dict = _load_audits()
+            audits_dict[doc_id] = report.model_dump()
+            _save_audits(audits_dict)
+            return report
 
     report = ai_service.audit_contract(doc_id, filename, chunks)
 
-    if content_hash:
+    # Only cache genuine AI audit reports (not mock fallback)
+    if content_hash and report.key_parties != ["Party 1", "Party 2"]:
         hash_cache[content_hash] = report.model_dump()
         _save_hash_cache(hash_cache)
 
@@ -442,9 +445,9 @@ async def perform_contract_audit(doc_id: str, current_user = Depends(get_current
     if not chunks:
         raise HTTPException(status_code=400, detail="No indexed clauses available for this contract.")
 
-    # Run or retrieve cached AI audit
+    # Run fresh AI audit (force_refresh=True to bypass hash cache)
     file_path = settings.UPLOAD_PATH / doc_info["filename"]
-    audit_report = _get_or_create_audit(doc_id, doc_info["filename"], chunks, file_path)
+    audit_report = _get_or_create_audit(doc_id, doc_info["filename"], chunks, file_path, force_refresh=True)
 
     # Update metadata with risk score & classification
     meta_dict[doc_id]["risk_score"] = audit_report.overall_risk_score
