@@ -144,7 +144,7 @@ export default function RepositoryView({
           }`}
         >
           <span className="w-2 h-2 rounded-full bg-rose-500" />
-          <span>High Risk ({documents.filter((d) => d.risk_score && d.risk_score >= 65).length})</span>
+          <span>High Risk ({documents.filter(isHighRiskDoc).length})</span>
         </button>
 
         <button
@@ -156,7 +156,7 @@ export default function RepositoryView({
           }`}
         >
           <span className="w-2 h-2 rounded-full bg-amber-500" />
-          <span>Medium Risk ({documents.filter((d) => d.risk_score && d.risk_score >= 35 && d.risk_score < 65).length})</span>
+          <span>Medium Risk ({documents.filter(isMedRiskDoc).length})</span>
         </button>
 
         <button
@@ -168,7 +168,7 @@ export default function RepositoryView({
           }`}
         >
           <span className="w-2 h-2 rounded-full bg-emerald-500" />
-          <span>Safe / Standard ({documents.filter((d) => !d.risk_score || d.risk_score < 35).length})</span>
+          <span>Safe / Standard ({documents.filter(isSafeDoc).length})</span>
         </button>
       </div>
 
@@ -184,8 +184,8 @@ export default function RepositoryView({
           {filteredDocs.map((doc) => {
             const isNonContract = doc.is_legal_contract === false || doc.risk_level === "NON_CONTRACT";
             const score = doc.risk_score ?? 0;
-            const isHigh = !isNonContract && score >= 65;
-            const isMed = !isNonContract && score >= 35 && score < 65;
+            const isHigh = isHighRiskDoc(doc);
+            const isMed = isMedRiskDoc(doc);
 
             return (
               <div

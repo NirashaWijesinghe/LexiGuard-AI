@@ -140,20 +140,19 @@ def _get_or_create_audit(doc_id: str, filename: str, chunks: list, file_path: Op
     audits_dict = _load_audits()
     audits_dict[doc_id] = report.model_dump()
 
-    # Synchronize all duplicate document instances of the same file ONLY if it is a genuine AI report
-    if report.key_parties != ["Party 1", "Party 2"]:
-        meta_dict = _load_meta()
-        for other_id, other_meta in meta_dict.items():
-            if other_meta.get("filename") == filename:
-                other_rep = report.model_dump()
-                other_rep["doc_id"] = other_id
-                audits_dict[other_id] = other_rep
-                other_meta["risk_score"] = report.overall_risk_score
-                other_meta["risk_level"] = report.risk_level
-                other_meta["is_legal_contract"] = report.is_legal_contract
-                other_meta["document_category"] = report.document_category
-        _save_meta(meta_dict)
+    # Synchronize all duplicate document instances of the same file to guarantee 100% score consistency
+    meta_dict = _load_meta()
+    for other_id, other_meta in meta_dict.items():
+        if other_meta.get("filename") == filename:
+            other_rep = report.model_dump()
+            other_rep["doc_id"] = other_id
+            audits_dict[other_id] = other_rep
+            other_meta["risk_score"] = report.overall_risk_score
+            other_meta["risk_level"] = report.risk_level
+            other_meta["is_legal_contract"] = report.is_legal_contract
+            other_meta["document_category"] = report.document_category
 
+    _save_meta(meta_dict)
     _save_audits(audits_dict)
     return report
 
@@ -304,6 +303,7 @@ async def upload_multiple_documents(files: list[UploadFile] = File(...), current
         except Exception as err:
             failed_files.append({"filename": file.filename, "reason": str(err)})
 
+    _save_audits(audits_dict)
     _save_meta(all_meta)
 
     return BatchUploadResponse(

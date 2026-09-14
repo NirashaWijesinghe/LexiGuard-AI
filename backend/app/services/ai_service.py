@@ -18,11 +18,10 @@ class AIService:
         self._configured_key = None
         self._client = None
         self.model_candidates = [
-            "gemini-3.6-flash",
-            "gemini-3.7-flash",
+            "gemini-3.5-flash-lite",
             "gemini-3.5-flash",
-            "gemini-2.5-flash-lite",
-            "gemini-2.5-pro"
+            "gemini-3.6-flash",
+            "gemini-3.7-flash"
         ]
 
     def _get_client(self):
@@ -37,7 +36,7 @@ class AIService:
         if not api_key or not client:
             return None, "GOOGLE_API_KEY not configured"
 
-        default_model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+        default_model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
         candidate_models = [default_model] + [m for m in self.model_candidates if m != default_model]
         last_error = None
 
@@ -369,9 +368,95 @@ JSON OUTPUT (NO PREAMBLE, NO MARKDOWN TICKS):"""
                 audit_timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             )
 
-        # Fallback Mock / Default Audit for genuine legal contracts
-        sample_first_page = chunks[0]['page_number'] if chunks else 1
-        sample_snippet = chunks[0]['text'][:200] if chunks else "Contract provisions and terms."
+        # Fallback Heuristic Analysis for genuine legal contracts (when AI API is temporarily unavailable)
+        combined_text = "\n".join([c.get("text", "") for c in chunks[:12]])
+
+        # 1. Extract Real Parties using regex
+        parties = []
+        p_match = re.search(r'(?:between|by and between)\s+([A-Za-z0-9\s.,&\-\(\)]+?)(?:\s*,|\s+and\b|\s*\()', combined_text, re.IGNORECASE)
+        if p_match:
+            p1 = p_match.group(1).strip()
+            if p1 and len(p1) > 2 and len(p1) < 80:
+                parties.append(p1)
+        p2_match = re.search(r'\band\s+([A-Za-z0-9\s.,&\-\(\)]+?)(?:\s*,|\s*\(|\s*\[|\s*collectively|\s*effective)', combined_text, re.IGNORECASE)
+        if p2_match:
+            p2 = p2_match.group(1).strip()
+            if p2 and len(p2) > 2 and len(p2) < 80 and p2 != (parties[0] if parties else ""):
+                parties.append(p2)
+
+        if not parties:
+            clean_name = filename.replace(".pdf", "").replace(".docx", "").replace("_", " ")
+            parties = [f"{clean_name} Signatory", "Counterparty"]
+
+        # 2. Extract Real Governing Law
+        law = "Laws of the jurisdiction governing the agreement"
+        law_match = re.search(r'(?:governed by|laws of)\s+([A-Za-z\s]+?)(?:\.|\n|;|,)', combined_text, re.IGNORECASE)
+        if law_match:
+            matched_law = law_match.group(1).strip()
+            if len(matched_law) < 50:
+                law = matched_law
+
+        # 3. Detect actual risk clauses from chunks
+        identified_risks = []
+        for c in chunks:
+            c_text = c.get("text", "")
+            c_page = c.get("page_number", 1)
+
+            if "indemnif" in c_text.lower() and not any(r.clause_title == "Indemnification Obligations" for r in identified_risks):
+                snippet = c_text[:300]
+                identified_risks.append(ContractClauseRisk(
+                    category="Liability & Indemnification",
+                    clause_title="Indemnification Obligations",
+                    severity="HIGH",
+                    page_number=c_page,
+                    original_text=snippet,
+                    risk_explanation="Clause imposes broad indemnification duties which may expose the business to unbudgeted third-party liabilities.",
+                    recommended_revision="Limit indemnification obligations strictly to direct damages caused by gross negligence or willful misconduct."
+                ))
+
+            if "terminate" in c_text.lower() and not any(r.clause_title == "Termination Rights & Notice" for r in identified_risks):
+                snippet = c_text[:300]
+                identified_risks.append(ContractClauseRisk(
+                    category="Termination & Remedies",
+                    clause_title="Termination Rights & Notice",
+                    severity="MEDIUM",
+                    page_number=c_page,
+                    original_text=snippet,
+                    risk_explanation="Review notice periods to ensure operational continuity in case of unexpected contract termination.",
+                    recommended_revision="Require at least thirty (30) days prior written notice before termination without cause."
+                ))
+
+            if ("liability" in c_text.lower() or "limitation of liability" in c_text.lower()) and not any(r.clause_title == "Limitation of Liability" for r in identified_risks):
+                snippet = c_text[:300]
+                identified_risks.append(ContractClauseRisk(
+                    category="Liability & Risk Allocation",
+                    clause_title="Limitation of Liability",
+                    severity="MEDIUM",
+                    page_number=c_page,
+                    original_text=snippet,
+                    risk_explanation="Ensure aggregate liability is mutually capped to prevent asymmetrical financial exposure.",
+                    recommended_revision="Include an explicit mutual aggregate liability cap limited to fees paid over the preceding 12 months."
+                ))
+
+        missing_clauses = [
+            MissingClauseAlert(
+                clause_name="Data Protection & Privacy Standard",
+                importance="HIGH",
+                reason="Standard data security and breach notification obligations are strongly advised in modern commercial agreements.",
+                suggested_language="Each party agrees to comply with applicable data protection regulations and notify the other within 72 hours of any security incident."
+            ),
+            MissingClauseAlert(
+                clause_name="Force Majeure Provisions",
+                importance="MEDIUM",
+                reason="Protects both parties from breach liability due to unforeseeable events beyond reasonable control.",
+                suggested_language="Neither party shall be in breach for delays resulting from acts of God, strikes, or government actions."
+            )
+        ]
+
+        high_count = sum(1 for r in identified_risks if r.severity in ["HIGH", "CRITICAL"])
+        med_count = sum(1 for r in identified_risks if r.severity == "MEDIUM")
+        low_count = sum(1 for r in identified_risks if r.severity in ["LOW", "SAFE"])
+        risk_score, risk_level = self.calculate_deterministic_risk_score(identified_risks, missing_clauses)
 
         return ContractAuditReport(
             doc_id=doc_id,
@@ -380,49 +465,17 @@ JSON OUTPUT (NO PREAMBLE, NO MARKDOWN TICKS):"""
             document_category="Legal Agreement",
             non_contract_notice=None,
             contract_type="Commercial Legal Agreement",
-            overall_risk_score=64,
-            risk_level="HIGH",
-            executive_summary=f"Automated risk audit completed for '{filename}'. The document contains critical liability and termination obligations requiring attorney review.",
-            key_parties=["Party 1", "Party 2"],
-            governing_law="Jurisdiction Specified in Agreement",
-            effective_dates_or_term="Standard Term",
-            high_risk_count=2,
-            medium_risk_count=1,
-            low_risk_count=0,
-            identified_risks=[
-                ContractClauseRisk(
-                    category="Liability & Indemnification",
-                    clause_title="Broad Indemnification & Unlimited Damages",
-                    severity="HIGH",
-                    page_number=sample_first_page,
-                    original_text=sample_snippet,
-                    risk_explanation="Clause imposes one-sided indemnification without an aggregate financial liability cap.",
-                    recommended_revision="Include mutual limitation of liability capped at 12 months fees paid under this agreement."
-                ),
-                ContractClauseRisk(
-                    category="Termination & Remedies",
-                    clause_title="Immediate Termination for Convenience",
-                    severity="HIGH",
-                    page_number=sample_first_page,
-                    original_text="Either party may terminate immediately upon written notice without cause.",
-                    risk_explanation="Exposes operations to sudden disruption without a standard 30-day notice and cure period.",
-                    recommended_revision="Require at least thirty (30) days prior written notice for termination for convenience."
-                )
-            ],
-            missing_clauses=[
-                MissingClauseAlert(
-                    clause_name="Limitation of Aggregate Liability Cap",
-                    importance="CRITICAL",
-                    reason="Absence of an explicit liability cap leaves the company exposed to uncapped consequential damages.",
-                    suggested_language="Neither party shall be liable for indirect, punitive, or consequential damages."
-                ),
-                MissingClauseAlert(
-                    clause_name="Data Privacy & GDPR Breach Notice",
-                    importance="HIGH",
-                    reason="Missing required 72-hour security incident notification timeline.",
-                    suggested_language="Each party agrees to notify the other within 72 hours of any suspected data breach."
-                )
-            ],
+            overall_risk_score=risk_score,
+            risk_level=risk_level,
+            executive_summary=f"Automated risk audit completed for '{filename}'. The agreement has been indexed and analyzed across {len(chunks)} key clauses.",
+            key_parties=parties,
+            governing_law=law,
+            effective_dates_or_term="Specified in Agreement",
+            high_risk_count=high_count,
+            medium_risk_count=med_count,
+            low_risk_count=low_count,
+            identified_risks=identified_risks,
+            missing_clauses=missing_clauses,
             audit_timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         )
 
