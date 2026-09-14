@@ -10,6 +10,7 @@ from app.config import settings
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
 class UserCreate(BaseModel):
+    name: Optional[str] = ""
     email: str
     password: str
 
@@ -41,7 +42,7 @@ def get_current_user(authorization: str = Header(None)):
 @router.post("/register", response_model=Token)
 async def register(user: UserCreate):
     try:
-        new_user = auth_service.register_user(user.email, user.password)
+        new_user = auth_service.register_user(user.email, user.password, name=user.name or "")
         access_token_expires = timedelta(minutes=60*24*7)
         access_token = auth_service.create_access_token(
             data={"sub": new_user["email"]}, expires_delta=access_token_expires

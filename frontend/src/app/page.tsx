@@ -61,9 +61,11 @@ export default function DashboardPage() {
   });
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
-  const userInitial = user?.email ? user.email.charAt(0).toUpperCase() : "U";
-  const userRawName = user?.email ? user.email.split("@")[0] : "User";
-  const userDisplayName = userRawName.charAt(0).toUpperCase() + userRawName.slice(1);
+  const userFullName = user?.name && user.name.trim()
+    ? user.name.trim()
+    : (user?.email ? user.email.split("@")[0].charAt(0).toUpperCase() + user.email.split("@")[0].slice(1) : "User");
+  const userDisplayName = userFullName.split(" ")[0];
+  const userInitial = userFullName.charAt(0).toUpperCase();
 
   const loadDocs = async () => {
     try {
@@ -292,7 +294,7 @@ export default function DashboardPage() {
                 {/* User Identity Header */}
                 <div className="px-3 py-2 mb-1 border-b border-slate-100 dark:border-slate-800/80">
                   <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                    {userDisplayName}
+                    {userFullName}
                   </div>
                   <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate" title={user?.email}>
                     {user?.email}
@@ -482,7 +484,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-white leading-tight">
-                  {userDisplayName}
+                  {userFullName}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   {user?.email}

@@ -32,10 +32,15 @@ class AuthService:
                     id TEXT PRIMARY KEY,
                     email TEXT UNIQUE NOT NULL,
                     password_hash TEXT NOT NULL,
+                    name TEXT DEFAULT '',
                     role TEXT NOT NULL DEFAULT 'user',
                     created_at TEXT NOT NULL
                 )
             """)
+            try:
+                cursor.execute("ALTER TABLE users ADD COLUMN name TEXT DEFAULT ''")
+            except Exception:
+                pass
             conn.commit()
 
     def get_password_hash(self, password: str) -> str:
@@ -71,7 +76,7 @@ class AuthService:
             cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
             return cursor.fetchone()
 
-    def register_user(self, email: str, password: str, role: str = "user") -> Dict[str, Any]:
+    def register_user(self, email: str, password: str, name: str = "", role: str = "user") -> Dict[str, Any]:
         existing_user = self.get_user_by_email(email)
         if existing_user:
             raise HTTPException(status_code=400, detail="Email already registered")
@@ -79,18 +84,20 @@ class AuthService:
         user_id = str(uuid.uuid4())
         hashed_password = self.get_password_hash(password)
         now = datetime.utcnow().isoformat()
+        clean_name = name.strip() if name else ""
         
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO users (id, email, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)",
-                (user_id, email, hashed_password, role, now)
+                "INSERT INTO users (id, email, password_hash, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (user_id, email, hashed_password, clean_name, role, now)
             )
             conn.commit()
             
         return {
             "id": user_id,
             "email": email,
+            "name": clean_name,
             "role": role,
             "created_at": now
         }

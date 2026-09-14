@@ -4,12 +4,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import axios from "axios";
-import { Shield, Lock, Mail, Loader2, ArrowRight } from "lucide-react";
+import { Shield, Lock, Mail, Loader2, ArrowRight, User } from "lucide-react";
 import Link from "next/link";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 export default function RegisterPage() {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -32,6 +33,7 @@ export default function RegisterPage() {
 
     try {
       const response = await axios.post(`${API_BASE_URL}/api/auth/register`, {
+        name,
         email,
         password,
       });
@@ -77,6 +79,30 @@ export default function RegisterPage() {
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10">
         <div className="bg-white/70 dark:bg-[#0c1226]/70 backdrop-blur-xl py-8 px-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)] sm:rounded-2xl sm:px-10 border border-slate-200 dark:border-white/5">
           <form className="space-y-6" onSubmit={handleRegister}>
+            <div>
+              <label
+                htmlFor="name"
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+              >
+                Full Name
+              </label>
+              <div className="mt-2 relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <User className="h-5 w-5 text-slate-400" />
+                </div>
+                <input
+                  id="name"
+                  name="name"
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-[#0a0f20] text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all sm:text-sm"
+                  placeholder="e.g. Nirasha Wijesinghe"
+                />
+              </div>
+            </div>
+
             <div>
               <label
                 htmlFor="email"
