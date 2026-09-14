@@ -98,14 +98,18 @@ export default function DashboardPage() {
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
+      setDocuments([]);
+      setSessions([]);
+      setSelectedDocId(null);
+      setActiveSessionId(null);
       loadDocs();
       loadSessions();
       checkHealth();
       const interval = setInterval(checkHealth, 15000);
       return () => clearInterval(interval);
     }
-  }, [user]);
+  }, [user?.id]);
 
   // Scroll to top and re-fetch documents when switching tabs
   useEffect(() => {

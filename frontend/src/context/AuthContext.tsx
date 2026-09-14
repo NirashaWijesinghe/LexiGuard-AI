@@ -57,7 +57,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    // Redirect to login is handled by components or router
+    if (typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
   };
 
   return (

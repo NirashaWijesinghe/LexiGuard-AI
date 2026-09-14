@@ -392,19 +392,17 @@ async def load_sample_contract(payload: dict, current_user = Depends(get_current
 @router.get("", response_model=DocumentListResponse)
 async def list_documents(current_user = Depends(get_current_user)):
     """
-    List all processed documents for the current user (including sample catalog).
+    List all processed documents for the current user (strict user isolation).
     """
     all_meta = _load_meta()
     audits_dict = _load_audits()
     
-    # Filter documents by user_id or legacy/shared documents
-    is_admin = current_user.get("role") == "admin"
     current_user_id = current_user.get("id")
     user_docs = []
     for doc_id, doc in all_meta.items():
         doc_user_id = doc.get("user_id")
-        # Include document if owned by user, unassigned (legacy/sample), or if user is admin
-        if is_admin or not doc_user_id or doc_user_id == current_user_id:
+        # Strict user isolation: each user (including admin in their personal repo) only sees their own documents
+        if doc_user_id == current_user_id:
             doc_data = dict(doc)
             if doc_id in audits_dict:
                 audit = audits_dict[doc_id]
@@ -618,13 +616,17 @@ async def summarize_document(doc_id: str):
     }
 
 @router.delete("/{doc_id}")
-async def delete_document(doc_id: str):
+async def delete_document(doc_id: str, current_user = Depends(get_current_user)):
     """
     Deletes a document from the vector store and disk.
     """
     meta_dict = _load_meta()
     if doc_id not in meta_dict:
         raise HTTPException(status_code=404, detail="Document not found")
+
+    doc_info = meta_dict[doc_id]
+    if doc_info.get("user_id") and doc_info.get("user_id") != current_user["id"] and current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to delete this document")
 
     # Delete from ChromaDB
     vector_service.delete_document(doc_id)
