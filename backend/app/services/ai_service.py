@@ -4,6 +4,7 @@ import re
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from google import genai
+from google.genai import types
 from app.config import settings
 from app.models.schemas import (
     ContractAuditReport, 
@@ -30,7 +31,7 @@ class AIService:
             self._configured_key = api_key
         return self._client, api_key
 
-    def _generate_content_with_fallback(self, prompt: str) -> tuple[Optional[str], Optional[str]]:
+    def _generate_content_with_fallback(self, prompt: str, temperature: Optional[float] = None) -> tuple[Optional[str], Optional[str]]:
         client, api_key = self._get_client()
         if not api_key or not client:
             return None, "GOOGLE_API_KEY not configured"
@@ -39,11 +40,14 @@ class AIService:
         candidate_models = [default_model] + [m for m in self.model_candidates if m != default_model]
         last_error = None
 
+        config = types.GenerateContentConfig(temperature=temperature) if temperature is not None else None
+
         for m_name in candidate_models:
             try:
                 response = client.models.generate_content(
                     model=m_name,
-                    contents=prompt
+                    contents=prompt,
+                    config=config
                 )
                 if response and response.text:
                     return response.text, None
@@ -124,6 +128,59 @@ Based on **{len(context_chunks)} relevant sections** retrieved from **{context_c
 - **Reference:** Page {context_chunks[0]['page_number']}
 - **Summary:** Context retrieved successfully. For deep AI synthesis, ensure GOOGLE_API_KEY is active and valid."""
 
+    def calculate_deterministic_risk_score(
+        self,
+        identified_risks: List[ContractClauseRisk],
+        missing_clauses: List[MissingClauseAlert]
+    ) -> tuple[int, str]:
+        """
+        Calculates an explainable, deterministic risk score (0-100) based on detected clause severity:
+        - Critical risk clause: +25
+        - High risk clause: +18
+        - Medium risk clause: +10
+        - Low risk clause: +4
+        - Critical missing clause: +15
+        - High missing clause: +10
+        - Medium/Low missing clause: +5
+        """
+        score = 0
+        has_critical = False
+
+        for r in identified_risks:
+            sev = (r.severity or "").upper()
+            if sev == "CRITICAL":
+                score += 25
+                has_critical = True
+            elif sev == "HIGH":
+                score += 18
+            elif sev == "MEDIUM":
+                score += 10
+            elif sev == "LOW":
+                score += 4
+
+        for m in missing_clauses:
+            imp = (m.importance or "").upper()
+            if imp == "CRITICAL":
+                score += 15
+                has_critical = True
+            elif imp == "HIGH":
+                score += 10
+            else:
+                score += 5
+
+        final_score = min(100, max(0, score))
+
+        if final_score >= 70 or has_critical:
+            level = "CRITICAL" if final_score >= 85 else "HIGH"
+        elif final_score >= 40:
+            level = "MEDIUM"
+        elif final_score >= 15:
+            level = "LOW"
+        else:
+            level = "SAFE"
+
+        return final_score, level
+
     def audit_contract(self, doc_id: str, filename: str, chunks: List[Dict[str, Any]]) -> ContractAuditReport:
         """
         Performs an automated Document Classification and Legal Risk Audit.
@@ -203,7 +260,7 @@ DOCUMENT TEXT EXCERPTS:
 
 JSON OUTPUT (NO PREAMBLE, NO MARKDOWN TICKS):"""
 
-        raw_text, error = self._generate_content_with_fallback(audit_prompt)
+        raw_text, error = self._generate_content_with_fallback(audit_prompt, temperature=0.0)
         if raw_text:
             try:
                 # Clean potential markdown wrappers
@@ -253,8 +310,7 @@ JSON OUTPUT (NO PREAMBLE, NO MARKDOWN TICKS):"""
                 low_count = sum(1 for r in identified_risks if r.severity in ["LOW", "SAFE"])
 
                 if is_contract:
-                    risk_score = parsed.get("overall_risk_score", min(100, high_count * 25 + med_count * 10))
-                    risk_level = parsed.get("risk_level", "HIGH" if risk_score > 60 else "MEDIUM" if risk_score > 30 else "LOW")
+                    risk_score, risk_level = self.calculate_deterministic_risk_score(identified_risks, missing_clauses)
                 else:
                     risk_score = 0
                     risk_level = "NON_CONTRACT"

@@ -1,7 +1,9 @@
 import shutil
 import json
+import hashlib
 from pathlib import Path
 from datetime import datetime
+from typing import Optional
 from fastapi import APIRouter, UploadFile, File, HTTPException, status
 from app.config import settings
 from app.services.pdf_service import pdf_service
@@ -22,6 +24,7 @@ router = APIRouter(prefix="/api/documents", tags=["Documents"])
 # Metadata storage file
 META_FILE = settings.UPLOAD_PATH / "documents_meta.json"
 AUDIT_FILE = settings.UPLOAD_PATH / "contracts_audit.json"
+CACHE_FILE = settings.UPLOAD_PATH / "audit_hash_cache.json"
 SAMPLE_CONTRACTS_DIR = Path(__file__).resolve().parents[3] / "sample_contracts"
 
 SAMPLE_CATALOG = [
@@ -80,6 +83,62 @@ def _save_audits(data: dict):
     with open(AUDIT_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
+def _load_hash_cache() -> dict:
+    if CACHE_FILE.exists():
+        try:
+            with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def _save_hash_cache(data: dict):
+    with open(CACHE_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+def _compute_document_hash(file_path: Optional[Path], chunks: list) -> str:
+    """
+    Computes a content-based SHA-256 fingerprint from the extracted contract clauses and/or file.
+    Identical agreement text produces the exact same hash.
+    """
+    if chunks:
+        combined_text = "\n".join(str(c.get("text", "")) for c in chunks)
+        return hashlib.sha256(combined_text.strip().encode("utf-8")).hexdigest()
+    if file_path and file_path.exists():
+        return hashlib.sha256(file_path.read_bytes()).hexdigest()
+    return ""
+
+def _get_or_create_audit(doc_id: str, filename: str, chunks: list, file_path: Optional[Path] = None) -> ContractAuditReport:
+    """
+    Returns cached audit report if an identical contract content hash was already audited,
+    guaranteeing 100% score consistency across duplicate uploads. Otherwise runs AI audit.
+    """
+    content_hash = _compute_document_hash(file_path, chunks)
+    hash_cache = _load_hash_cache()
+
+    if content_hash and content_hash in hash_cache:
+        cached_data = dict(hash_cache[content_hash])
+        cached_data["doc_id"] = doc_id
+        cached_data["filename"] = filename
+        cached_data["audit_timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        report = ContractAuditReport(**cached_data)
+        
+        audits_dict = _load_audits()
+        audits_dict[doc_id] = report.model_dump()
+        _save_audits(audits_dict)
+        return report
+
+    report = ai_service.audit_contract(doc_id, filename, chunks)
+
+    if content_hash:
+        hash_cache[content_hash] = report.model_dump()
+        _save_hash_cache(hash_cache)
+
+    audits_dict = _load_audits()
+    audits_dict[doc_id] = report.model_dump()
+    _save_audits(audits_dict)
+    return report
+
 @router.post("/upload", response_model=UploadResponse)
 async def upload_document(file: UploadFile = File(...), current_user = Depends(get_current_user)):
     """
@@ -120,15 +179,11 @@ async def upload_document(file: UploadFile = File(...), current_user = Depends(g
         document_category = "Legal Agreement"
 
         try:
-            audit_report = ai_service.audit_contract(doc_id, file.filename, chunks)
+            audit_report = _get_or_create_audit(doc_id, file.filename, chunks, file_path)
             risk_score = audit_report.overall_risk_score
             risk_level = audit_report.risk_level
             is_legal_contract = audit_report.is_legal_contract
             document_category = audit_report.document_category
-
-            audits_dict = _load_audits()
-            audits_dict[doc_id] = audit_report.model_dump()
-            _save_audits(audits_dict)
         except Exception as audit_err:
             print(f"[DocumentUpload] Audit warning for {file.filename}: {audit_err}")
 
@@ -200,12 +255,11 @@ async def upload_multiple_documents(files: list[UploadFile] = File(...), current
             document_category = "Legal Agreement"
 
             try:
-                audit_report = ai_service.audit_contract(doc_id, file.filename, chunks)
+                audit_report = _get_or_create_audit(doc_id, file.filename, chunks, file_path)
                 risk_score = audit_report.overall_risk_score
                 risk_level = audit_report.risk_level
                 is_legal_contract = audit_report.is_legal_contract
                 document_category = audit_report.document_category
-                audits_dict[doc_id] = audit_report.model_dump()
             except Exception as audit_err:
                 print(f"[BatchUpload] Audit warning for {file.filename}: {audit_err}")
 
@@ -298,15 +352,11 @@ async def load_sample_contract(payload: dict, current_user = Depends(get_current
         document_category = "Legal Agreement"
 
         try:
-            audit_report = ai_service.audit_contract(doc_id, filename, chunks)
+            audit_report = _get_or_create_audit(doc_id, filename, chunks, dest_path)
             risk_score = audit_report.overall_risk_score
             risk_level = audit_report.risk_level
             is_legal_contract = audit_report.is_legal_contract
             document_category = audit_report.document_category
-
-            audits_dict = _load_audits()
-            audits_dict[doc_id] = audit_report.model_dump()
-            _save_audits(audits_dict)
         except Exception as audit_err:
             print(f"[SampleLoad] Audit warning for {filename}: {audit_err}")
 
@@ -390,13 +440,9 @@ async def perform_contract_audit(doc_id: str, current_user = Depends(get_current
     if not chunks:
         raise HTTPException(status_code=400, detail="No indexed clauses available for this contract.")
 
-    # Run AI audit
-    audit_report = ai_service.audit_contract(doc_id, doc_info["filename"], chunks)
-
-    # Save to cached audits
-    audits_dict = _load_audits()
-    audits_dict[doc_id] = audit_report.model_dump()
-    _save_audits(audits_dict)
+    # Run or retrieve cached AI audit
+    file_path = settings.UPLOAD_PATH / doc_info["filename"]
+    audit_report = _get_or_create_audit(doc_id, doc_info["filename"], chunks, file_path)
 
     # Update metadata with risk score & classification
     meta_dict[doc_id]["risk_score"] = audit_report.overall_risk_score
@@ -416,11 +462,28 @@ async def get_document_audit(doc_id: str, current_user = Depends(get_current_use
     if doc_id in audits_dict:
         return ContractAuditReport(**audits_dict[doc_id])
 
-    # If not yet audited, run audit
-    return await perform_contract_audit(doc_id)
+    # Check if this document content was already audited under another doc_id / cached hash
+    meta_dict = _load_meta()
+    if doc_id in meta_dict:
+        doc_info = meta_dict[doc_id]
+        file_path = settings.UPLOAD_PATH / doc_info.get("filename", "")
+        if file_path.exists():
+            content_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
+            hash_cache = _load_hash_cache()
+            if content_hash in hash_cache:
+                cached_data = dict(hash_cache[content_hash])
+                cached_data["doc_id"] = doc_id
+                cached_data["filename"] = doc_info.get("filename", "Document.pdf")
+                report = ContractAuditReport(**cached_data)
+                audits_dict[doc_id] = report.model_dump()
+                _save_audits(audits_dict)
+                return report
+
+    # If not yet audited, run audit with authorized user context
+    return await perform_contract_audit(doc_id, current_user=current_user)
 
 @router.get("/{doc_id}/export-audit")
-async def export_audit_markdown(doc_id: str):
+async def export_audit_markdown(doc_id: str, current_user = Depends(get_current_user)):
     """
     Generates an executive-ready Markdown Due Diligence or Document Intelligence report for export.
     """
@@ -431,7 +494,7 @@ async def export_audit_markdown(doc_id: str):
     audits_dict = _load_audits()
     if doc_id not in audits_dict:
         # Run audit first
-        audit_report = await perform_contract_audit(doc_id)
+        audit_report = await perform_contract_audit(doc_id, current_user=current_user)
         audit_data = audit_report.model_dump()
     else:
         audit_data = audits_dict[doc_id]

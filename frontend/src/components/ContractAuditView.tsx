@@ -58,6 +58,7 @@ export default function ContractAuditView({
 }: ContractAuditViewProps) {
   const [auditReport, setAuditReport] = useState<ContractAuditReport | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
   const [filterSeverity, setFilterSeverity] = useState<"ALL" | "HIGH" | "MEDIUM" | "MISSING">("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [copiedClauseId, setCopiedClauseId] = useState<string | null>(null);
@@ -69,6 +70,7 @@ export default function ContractAuditView({
   const loadAudit = async (forceRefresh = false) => {
     if (!selectedDoc) return;
     setLoading(true);
+    setError(null);
     try {
       let data: ContractAuditReport;
       if (forceRefresh) {
@@ -80,8 +82,9 @@ export default function ContractAuditView({
       if (onAuditComplete) {
         onAuditComplete(data);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to load contract audit", err);
+      setError(err?.response?.data?.detail || "Could not retrieve audit report from backend server. Please verify backend status.");
     } finally {
       setLoading(false);
     }
@@ -398,10 +401,13 @@ export default function ContractAuditView({
     );
   }
 
-  const isNonContract = auditReport?.is_legal_contract === false || auditReport?.risk_level === "NON_CONTRACT";
-  const score = auditReport?.overall_risk_score ?? 50;
-  const isHighRisk = !isNonContract && score >= 65;
-  const isModerateRisk = !isNonContract && score >= 35 && score < 65;
+  const isNonContract = auditReport
+    ? (auditReport.is_legal_contract === false || auditReport.risk_level === "NON_CONTRACT")
+    : (selectedDoc.is_legal_contract === false);
+  const score = auditReport?.overall_risk_score ?? selectedDoc.risk_score ?? 50;
+  const currentRiskLevel = auditReport?.risk_level ?? selectedDoc.risk_level ?? (score >= 65 ? "HIGH" : score >= 35 ? "MEDIUM" : "SAFE");
+  const isHighRisk = !isNonContract && (score >= 65 || currentRiskLevel === "HIGH" || currentRiskLevel === "CRITICAL");
+  const isModerateRisk = !isNonContract && !isHighRisk && (score >= 35 || currentRiskLevel === "MEDIUM");
 
   const scoreColor = isNonContract
     ? "text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-500/30 bg-sky-50 dark:bg-sky-500/10"
@@ -442,6 +448,21 @@ export default function ContractAuditView({
 
   return (
     <div className="flex-1 flex flex-col gap-6 overflow-y-auto pr-1 pb-10">
+      {error && !auditReport && (
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-center justify-between gap-3 shadow-md">
+          <div className="flex items-center gap-2">
+            <Info className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>Audit details currently unavailable from server. Showing catalog metadata.</span>
+          </div>
+          <button
+            onClick={() => loadAudit(true)}
+            className="px-3 py-1 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-100 font-semibold border border-amber-500/40 transition cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Top Document Header & Selector */}
       <div className="relative z-30 p-6 rounded-3xl bg-white/95 dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800/80 backdrop-blur-xl shadow-sm dark:shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4 flex-1 min-w-0">
@@ -668,7 +689,7 @@ export default function ContractAuditView({
                 {isNonContract ? "Document Status" : "Contract Risk Level"}
               </span>
               <span className="text-sm font-black text-slate-900 dark:text-white mt-0.5 block">
-                {isNonContract ? "INFORMATIONAL DOC" : (auditReport?.risk_level || "SAFE")}
+                {isNonContract ? "INFORMATIONAL DOC" : currentRiskLevel}
               </span>
             </div>
 

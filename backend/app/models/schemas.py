@@ -10,6 +10,7 @@ class DocumentMetadata(BaseModel):
     total_chunks: int
     uploaded_at: str
     user_id: Optional[str] = None
+    content_hash: Optional[str] = None
     risk_score: Optional[int] = None
     risk_level: Optional[str] = None
     is_legal_contract: Optional[bool] = None
