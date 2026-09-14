@@ -202,7 +202,7 @@ export default function DashboardPage() {
           <nav className="flex items-center p-1.5 rounded-2xl bg-slate-200/60 dark:bg-slate-900/80 border border-slate-300/70 dark:border-slate-800/90 shadow-inner backdrop-blur-md">
             <button
               onClick={() => setActiveTab("overview")}
-              className={`flex items-center gap-2 py-2 px-3.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-2 py-2 px-3.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                 activeTab === "overview"
                   ? "bg-white dark:bg-gradient-to-r dark:from-indigo-900/90 dark:to-slate-800 text-indigo-700 dark:text-indigo-200 border border-slate-200 dark:border-indigo-500/40 shadow-xs"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white/60 dark:hover:bg-slate-800/40"
@@ -214,7 +214,7 @@ export default function DashboardPage() {
 
             <button
               onClick={() => setActiveTab("auditor")}
-              className={`flex items-center gap-2 py-2 px-3.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-2 py-2 px-3.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                 activeTab === "auditor"
                   ? "bg-white dark:bg-gradient-to-r dark:from-indigo-900/90 dark:to-slate-800 text-indigo-700 dark:text-indigo-200 border border-slate-200 dark:border-indigo-500/40 shadow-xs"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white/60 dark:hover:bg-slate-800/40"
@@ -226,7 +226,7 @@ export default function DashboardPage() {
 
             <button
               onClick={() => setActiveTab("copilot")}
-              className={`flex items-center gap-2 py-2 px-3.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-2 py-2 px-3.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                 activeTab === "copilot"
                   ? "bg-white dark:bg-gradient-to-r dark:from-indigo-900/90 dark:to-slate-800 text-indigo-700 dark:text-indigo-200 border border-slate-200 dark:border-indigo-500/40 shadow-xs"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white/60 dark:hover:bg-slate-800/40"
@@ -238,7 +238,7 @@ export default function DashboardPage() {
 
             <button
               onClick={() => setActiveTab("repository")}
-              className={`flex items-center gap-2 py-2 px-3.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-2 py-2 px-3.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                 activeTab === "repository"
                   ? "bg-white dark:bg-gradient-to-r dark:from-indigo-900/90 dark:to-slate-800 text-indigo-700 dark:text-indigo-200 border border-slate-200 dark:border-indigo-500/40 shadow-xs"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white/60 dark:hover:bg-slate-800/40"
@@ -247,26 +247,26 @@ export default function DashboardPage() {
               <FolderKanban className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               <span>Repository ({documents.length})</span>
             </button>
-
-            {/* Admin-Only Console Navigation Tab */}
-            {user?.role === "admin" && (
-              <Link
-                href="/admin"
-                className="flex items-center gap-2 py-2 px-3.5 rounded-xl text-xs font-bold text-indigo-700 dark:text-sky-300 hover:text-indigo-950 dark:hover:text-white bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 border border-indigo-200 dark:border-indigo-500/40 transition-all shadow-xs cursor-pointer ml-1"
-                title="Open Enterprise Admin Console"
-              >
-                <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                <span>Admin Console</span>
-              </Link>
-            )}
           </nav>
 
           {/* Right Controls: Quick Upload + Health Status + Theme Toggle */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 shrink-0">
+            {/* Admin Console Pill (Only for Admins) */}
+            {user?.role === "admin" && (
+              <Link
+                href="/admin"
+                className="flex items-center gap-1.5 py-2 px-3 rounded-xl bg-purple-50 dark:bg-purple-950/50 hover:bg-purple-100 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30 text-xs font-bold transition-all shadow-xs cursor-pointer whitespace-nowrap"
+                title="Open Enterprise Admin Console"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-purple-500" />
+                <span className="hidden sm:inline">Admin Console</span>
+              </Link>
+            )}
+
             {/* Quick Upload Button */}
             <button
               onClick={() => setActiveTab("overview")}
-              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-500 hover:to-sky-500 text-white text-xs font-bold shadow-md shadow-indigo-500/25 flex items-center gap-1.5 transition-all cursor-pointer hover:scale-105 active:scale-95"
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-500 hover:to-sky-500 text-white text-xs font-bold shadow-md shadow-indigo-500/25 flex items-center gap-1.5 transition-all cursor-pointer hover:scale-105 active:scale-95 whitespace-nowrap shrink-0"
               title="Upload New Agreement or Document"
             >
               <Upload className="w-3.5 h-3.5" />
