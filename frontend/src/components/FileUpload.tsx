@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef } from "react";
-import { UploadCloud, CheckCircle2, AlertCircle, Loader2, FileUp, Files } from "lucide-react";
+import { UploadCloud, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { uploadBatchDocuments, DocumentMeta } from "../lib/api";
 
 interface FileUploadProps {
@@ -146,19 +146,14 @@ export default function FileUpload({ onUploadSuccess, onBatchUploadSuccess }: Fi
                 "Processing & Indexing Clauses into ChromaDB..."
               ) : (
                 <>
-                  <span>Drag & Drop PDF or Word (.docx), or</span>
-                  <span className="text-indigo-600 dark:text-indigo-400 underline decoration-indigo-400/50 underline-offset-2">Browse Files</span>
+                  <span>Drop your agreements here, or</span>
+                  <span className="text-indigo-600 dark:text-indigo-400 underline decoration-indigo-400/50 underline-offset-2">browse</span>
                 </>
               )}
             </h4>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-              PDF, Word (.docx), & Scanned Agreements (Max 20MB)
+            <p className="text-[12px] text-slate-500 dark:text-slate-400 mt-1">
+              Supports PDF & Word (.docx) up to 20MB
             </p>
-          </div>
-
-          <div className="inline-flex items-center gap-1.5 text-[10px] text-indigo-700 dark:text-indigo-300 font-semibold px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-500/15 border border-indigo-200 dark:border-indigo-500/30 shadow-xs">
-            <FileUp className="w-3 h-3" />
-            <span>AI Multimodal OCR & Contract Clause Extraction</span>
           </div>
         </div>
       </div>
