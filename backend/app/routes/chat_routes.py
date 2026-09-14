@@ -6,11 +6,13 @@ from app.services.vector_service import vector_service
 from app.services.ai_service import ai_service
 from app.services.session_service import session_service
 from app.config import settings
+from app.routes.auth_routes import get_current_user
+from fastapi import Depends
 
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
 
 @router.post("", response_model=ChatResponse)
-async def chat_with_documents(request: ChatRequest):
+async def chat_with_documents(request: ChatRequest, current_user = Depends(get_current_user)):
     """
     RAG Chat endpoint:
     1. Queries ChromaDB for top relevant context chunks.
@@ -27,7 +29,7 @@ async def chat_with_documents(request: ChatRequest):
     session_id = request.session_id
     if not session_id:
         title = query[:45] + "..." if len(query) > 45 else query
-        new_session = session_service.create_session(title=title, doc_id=request.doc_id)
+        new_session = session_service.create_session(user_id=current_user["id"], title=title, doc_id=request.doc_id)
         session_id = new_session["id"]
 
     # Save user message to session
@@ -36,6 +38,7 @@ async def chat_with_documents(request: ChatRequest):
         session_id=session_id,
         role="user",
         content=query,
+        user_id=current_user["id"],
         timestamp=user_ts
     )
 
@@ -72,6 +75,7 @@ async def chat_with_documents(request: ChatRequest):
         session_id=session_id,
         role="assistant",
         content=ai_answer,
+        user_id=current_user["id"],
         sources=citations_data,
         timestamp=ai_ts
     )

@@ -23,6 +23,7 @@ class SessionService:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS chat_sessions (
                     id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
                     title TEXT NOT NULL,
                     doc_id TEXT,
                     created_at TEXT NOT NULL,
@@ -43,18 +44,19 @@ class SessionService:
             """)
             conn.commit()
 
-    def create_session(self, title: str = "New Chat", doc_id: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:
+    def create_session(self, user_id: str, title: str = "New Chat", doc_id: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:
         sid = session_id or str(uuid.uuid4())
         now = datetime.utcnow().isoformat()
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO chat_sessions (id, title, doc_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-                (sid, title, doc_id, now, now)
+                "INSERT INTO chat_sessions (id, user_id, title, doc_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (sid, user_id, title, doc_id, now, now)
             )
             conn.commit()
         return {
             "id": sid,
+            "user_id": user_id,
             "title": title,
             "doc_id": doc_id,
             "created_at": now,
@@ -71,12 +73,13 @@ class SessionService:
                 return None
             return dict(row)
 
-    def list_sessions(self) -> List[Dict[str, Any]]:
+    def list_sessions(self, user_id: str) -> List[Dict[str, Any]]:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT 
                     s.id, 
+                    s.user_id,
                     s.title, 
                     s.doc_id, 
                     s.created_at, 
@@ -84,9 +87,10 @@ class SessionService:
                     COUNT(m.id) as message_count
                 FROM chat_sessions s
                 LEFT JOIN chat_messages m ON s.id = m.session_id
+                WHERE s.user_id = ?
                 GROUP BY s.id
                 ORDER BY s.updated_at DESC
-            """)
+            """, (user_id,))
             rows = cursor.fetchall()
             return [dict(r) for r in rows]
 
@@ -116,6 +120,7 @@ class SessionService:
         session_id: str, 
         role: str, 
         content: str, 
+        user_id: Optional[str] = None,
         sources: Optional[List[Dict[str, Any]]] = None,
         timestamp: Optional[str] = None,
         msg_id: Optional[str] = None
@@ -130,8 +135,10 @@ class SessionService:
             # Ensure session exists
             cursor.execute("SELECT id FROM chat_sessions WHERE id = ?", (session_id,))
             if not cursor.fetchone():
+                if not user_id:
+                    raise ValueError("user_id must be provided to create a new session")
                 title = content[:40] + "..." if len(content) > 40 else content
-                self.create_session(title=title, session_id=session_id)
+                self.create_session(user_id=user_id, title=title, session_id=session_id)
 
             cursor.execute(
                 "INSERT INTO chat_messages (id, session_id, role, content, sources_json, timestamp, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",

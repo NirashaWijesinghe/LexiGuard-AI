@@ -14,6 +14,8 @@ from app.models.schemas import (
     BatchUploadResponse,
     ContractAuditReport
 )
+from app.routes.auth_routes import get_current_user
+from fastapi import Depends
 
 router = APIRouter(prefix="/api/documents", tags=["Documents"])
 
@@ -79,7 +81,7 @@ def _save_audits(data: dict):
         json.dump(data, f, indent=2)
 
 @router.post("/upload", response_model=UploadResponse)
-async def upload_document(file: UploadFile = File(...)):
+async def upload_document(file: UploadFile = File(...), current_user = Depends(get_current_user)):
     """
     Upload a Legal Contract PDF, extract pages, chunk content, and index into ChromaDB.
     """
@@ -139,6 +141,7 @@ async def upload_document(file: UploadFile = File(...)):
             "total_pages": total_pages,
             "total_chunks": len(chunks),
             "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "user_id": current_user["id"],
             "risk_score": risk_score,
             "risk_level": risk_level,
             "is_legal_contract": is_legal_contract,
@@ -161,7 +164,7 @@ async def upload_document(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
 
 @router.post("/upload-batch", response_model=BatchUploadResponse)
-async def upload_multiple_documents(files: list[UploadFile] = File(...)):
+async def upload_multiple_documents(files: list[UploadFile] = File(...), current_user = Depends(get_current_user)):
     """
     Upload multiple PDF documents in one request, extract, chunk, and index into ChromaDB.
     """
@@ -214,6 +217,7 @@ async def upload_multiple_documents(files: list[UploadFile] = File(...)):
                 "total_pages": total_pages,
                 "total_chunks": len(chunks),
                 "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "user_id": current_user["id"],
                 "risk_score": risk_score,
                 "risk_level": risk_level,
                 "is_legal_contract": is_legal_contract,
@@ -243,7 +247,7 @@ async def get_sample_contracts():
     return {"samples": SAMPLE_CATALOG}
 
 @router.post("/load-sample", response_model=UploadResponse)
-async def load_sample_contract(payload: dict):
+async def load_sample_contract(payload: dict, current_user = Depends(get_current_user)):
     """
     Loads and processes a sample contract PDF directly from the sample catalog.
     """
@@ -314,6 +318,7 @@ async def load_sample_contract(payload: dict):
             "total_pages": total_pages,
             "total_chunks": len(chunks),
             "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "user_id": current_user["id"],
             "risk_score": risk_score,
             "risk_level": risk_level,
             "is_legal_contract": is_legal_contract,
@@ -335,28 +340,41 @@ async def load_sample_contract(payload: dict):
         raise HTTPException(status_code=500, detail=f"Error processing sample contract: {str(e)}")
 
 @router.get("", response_model=DocumentListResponse)
-async def list_documents():
+async def list_documents(current_user = Depends(get_current_user)):
     """
-    Returns list of all uploaded and indexed contracts.
+    List all processed documents for the current user (including sample catalog).
     """
-    meta_dict = _load_meta()
+    all_meta = _load_meta()
     audits_dict = _load_audits()
     
-    docs = []
-    for doc_id, data in meta_dict.items():
-        doc_data = dict(data)
-        if doc_id in audits_dict:
-            audit = audits_dict[doc_id]
-            doc_data["risk_score"] = audit.get("overall_risk_score")
-            doc_data["risk_level"] = audit.get("risk_level")
-            doc_data["is_legal_contract"] = audit.get("is_legal_contract", True)
-            doc_data["document_category"] = audit.get("document_category", "Legal Agreement")
-        docs.append(DocumentMetadata(**doc_data))
-        
-    return DocumentListResponse(documents=docs, total_count=len(docs))
+    # Filter documents by user_id or legacy/shared documents
+    is_admin = current_user.get("role") == "admin"
+    current_user_id = current_user.get("id")
+    user_docs = []
+    for doc_id, doc in all_meta.items():
+        doc_user_id = doc.get("user_id")
+        # Include document if owned by user, unassigned (legacy/sample), or if user is admin
+        if is_admin or not doc_user_id or doc_user_id == current_user_id:
+            doc_data = dict(doc)
+            if doc_id in audits_dict:
+                audit = audits_dict[doc_id]
+                doc_data["risk_score"] = audit.get("overall_risk_score")
+                doc_data["risk_level"] = audit.get("risk_level")
+                doc_data["is_legal_contract"] = audit.get("is_legal_contract", True)
+                doc_data["document_category"] = audit.get("document_category", "Legal Agreement")
+            user_docs.append(DocumentMetadata(**doc_data))
+            
+    # Always include sample catalog for demo purposes
+    samples = SAMPLE_CATALOG.copy()
+    
+    return DocumentListResponse(
+        documents=user_docs,
+        total_count=len(user_docs),
+        samples=samples
+    )
 
 @router.post("/{doc_id}/audit", response_model=ContractAuditReport)
-async def perform_contract_audit(doc_id: str):
+async def perform_contract_audit(doc_id: str, current_user = Depends(get_current_user)):
     """
     Performs a deep document intelligence / legal risk audit on the document.
     """
@@ -365,6 +383,9 @@ async def perform_contract_audit(doc_id: str):
         raise HTTPException(status_code=404, detail="Document not found")
 
     doc_info = meta_dict[doc_id]
+    if doc_info.get("user_id") and doc_info.get("user_id") != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to access this document")
+
     chunks = vector_service.get_document_chunks(doc_id, limit=20)
     if not chunks:
         raise HTTPException(status_code=400, detail="No indexed clauses available for this contract.")
@@ -387,9 +408,9 @@ async def perform_contract_audit(doc_id: str):
     return audit_report
 
 @router.get("/{doc_id}/audit", response_model=ContractAuditReport)
-async def get_contract_audit(doc_id: str):
+async def get_document_audit(doc_id: str, current_user = Depends(get_current_user)):
     """
-    Retrieves the existing audit report or generates a new one if not yet audited.
+    Get the full audit report for a specific document, or generate a new one if not yet audited.
     """
     audits_dict = _load_audits()
     if doc_id in audits_dict:

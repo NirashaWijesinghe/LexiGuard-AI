@@ -4,6 +4,7 @@ from app.config import settings
 from app.routes.document_routes import router as document_router
 from app.routes.chat_routes import router as chat_router
 from app.routes.session_routes import router as session_router
+from app.routes.auth_routes import router as auth_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -23,6 +24,7 @@ app.add_middleware(
 )
 
 # Register routes
+app.include_router(auth_router)
 app.include_router(document_router)
 app.include_router(chat_router)
 app.include_router(session_router)

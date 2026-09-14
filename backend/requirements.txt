@@ -9,3 +9,5 @@ langchain>=0.3.7
 langchain-community>=0.3.7
 langchain-google-genai>=2.0.4
 chromadb>=0.5.20
+passlib[bcrypt]>=1.7.4
+PyJWT>=2.14.0

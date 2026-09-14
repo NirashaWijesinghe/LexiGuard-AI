@@ -1,5 +1,6 @@
 "use client";
-
+import { useRouter } from "next/navigation";
+import { useAuth } from "../context/AuthContext";
 import React, { useState, useEffect } from "react";
 import { 
   Sparkles, 
@@ -18,8 +19,11 @@ import {
   Activity,
   Sun,
   Moon,
-  Upload
+  Upload,
+  UserCircle,
+  LogOut
 } from "lucide-react";
+import Link from "next/link";
 import OverviewDashboard from "../components/OverviewDashboard";
 import ContractAuditView from "../components/ContractAuditView";
 import ChatInterface from "../components/ChatInterface";
@@ -38,6 +42,8 @@ import {
 type ActiveTab = "overview" | "auditor" | "copilot" | "repository";
 
 export default function DashboardPage() {
+  const { user, logout, isLoading: authLoading } = useAuth();
+  const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<ActiveTab>("overview");
   const [documents, setDocuments] = useState<DocumentMeta[]>([]);
@@ -59,7 +65,7 @@ export default function DashboardPage() {
         setSelectedDocId(docs[0].doc_id);
       }
     } catch (err) {
-      console.error("Failed to load documents", err);
+      console.warn("Failed to load documents", err);
     }
   };
 
@@ -68,7 +74,7 @@ export default function DashboardPage() {
       const sess = await fetchSessions();
       setSessions(sess);
     } catch (err) {
-      console.error("Failed to load sessions", err);
+      console.warn("Failed to load sessions", err);
     }
   };
 
@@ -78,12 +84,20 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    loadDocs();
-    loadSessions();
-    checkHealth();
-    const interval = setInterval(checkHealth, 15000);
-    return () => clearInterval(interval);
-  }, []);
+    if (!authLoading && !user) {
+      router.push("/login");
+    }
+  }, [user, authLoading, router]);
+
+  useEffect(() => {
+    if (user) {
+      loadDocs();
+      loadSessions();
+      checkHealth();
+      const interval = setInterval(checkHealth, 15000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
 
   // Scroll to top and re-fetch documents when switching tabs
   useEffect(() => {
@@ -139,6 +153,14 @@ export default function DashboardPage() {
   };
 
   const selectedDoc = documents.find((d) => d.doc_id === selectedDocId) || (documents.length > 0 ? documents[0] : null);
+
+  if (authLoading || !user) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-[#060919] flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100/90 via-slate-50 to-indigo-50/25 dark:from-[#060919] dark:via-[#060919] dark:to-[#080d24] text-slate-900 dark:text-slate-100 flex flex-col font-sans selection:bg-indigo-500/30 selection:text-indigo-900 dark:selection:text-indigo-200 transition-colors duration-300">
@@ -226,6 +248,34 @@ export default function DashboardPage() {
               <Upload className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Upload PDF</span>
             </button>
+            
+            {/* User Menu */}
+            <div className="relative group ml-2">
+              <button className="flex items-center gap-2 p-1.5 pl-3 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                <span className="text-xs font-medium max-w-[100px] truncate">{user?.email}</span>
+                <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center">
+                  <UserCircle className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                </div>
+              </button>
+              
+              <div className="absolute right-0 mt-2 w-48 rounded-xl bg-white dark:bg-[#0c1226] border border-slate-200 dark:border-white/10 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform origin-top-right z-50">
+                <div className="p-2 space-y-1">
+                  {user?.role === "admin" && (
+                    <Link href="/admin" className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+                      <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                      Admin Dashboard
+                    </Link>
+                  )}
+                  <button 
+                    onClick={logout}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            </div>
 
             {/* Theme Toggle Button */}
             <button

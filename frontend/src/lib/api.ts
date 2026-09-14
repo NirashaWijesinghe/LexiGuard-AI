@@ -1,9 +1,19 @@
 import axios from "axios";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+});
+
+api.interceptors.request.use((config) => {
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  }
+  return config;
 });
 
 export interface DocumentMeta {
@@ -131,8 +141,12 @@ export async function uploadBatchDocuments(files: File[]): Promise<{
 }
 
 export async function fetchDocuments(): Promise<DocumentMeta[]> {
-  const response = await api.get("/api/documents");
-  return response.data.documents || [];
+  try {
+    const response = await api.get("/api/documents");
+    return response.data.documents || [];
+  } catch (error) {
+    return [];
+  }
 }
 
 export async function deleteDocument(docId: string): Promise<void> {
