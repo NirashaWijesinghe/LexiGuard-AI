@@ -139,6 +139,20 @@ def _get_or_create_audit(doc_id: str, filename: str, chunks: list, file_path: Op
 
     audits_dict = _load_audits()
     audits_dict[doc_id] = report.model_dump()
+
+    # Synchronize all duplicate document instances of the same file to guarantee 100% score consistency
+    meta_dict = _load_meta()
+    for other_id, other_meta in meta_dict.items():
+        if other_meta.get("filename") == filename:
+            other_rep = report.model_dump()
+            other_rep["doc_id"] = other_id
+            audits_dict[other_id] = other_rep
+            other_meta["risk_score"] = report.overall_risk_score
+            other_meta["risk_level"] = report.risk_level
+            other_meta["is_legal_contract"] = report.is_legal_contract
+            other_meta["document_category"] = report.document_category
+
+    _save_meta(meta_dict)
     _save_audits(audits_dict)
     return report
 
@@ -403,6 +417,7 @@ async def list_documents(current_user = Depends(get_current_user)):
     """
     all_meta = _load_meta()
     audits_dict = _load_audits()
+    hash_cache = _load_hash_cache()
     
     current_user_id = current_user.get("id")
     user_docs = []
@@ -411,7 +426,16 @@ async def list_documents(current_user = Depends(get_current_user)):
         # Strict user isolation: each user (including admin in their personal repo) only sees their own documents
         if doc_user_id == current_user_id:
             doc_data = dict(doc)
-            if doc_id in audits_dict:
+            file_path = settings.UPLOAD_PATH / doc.get("filename", "")
+            content_hash = hashlib.sha256(file_path.read_bytes()).hexdigest() if file_path.exists() else ""
+
+            if content_hash and content_hash in hash_cache:
+                cached = hash_cache[content_hash]
+                doc_data["risk_score"] = cached.get("overall_risk_score")
+                doc_data["risk_level"] = cached.get("risk_level")
+                doc_data["is_legal_contract"] = cached.get("is_legal_contract", True)
+                doc_data["document_category"] = cached.get("document_category", "Legal Agreement")
+            elif doc_id in audits_dict:
                 audit = audits_dict[doc_id]
                 doc_data["risk_score"] = audit.get("overall_risk_score")
                 doc_data["risk_level"] = audit.get("risk_level")
