@@ -209,8 +209,10 @@ export default function ChatInterface({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.toLowerCase().endsWith(".pdf")) {
-      setAttachError("Please select a valid PDF document (.pdf only).");
+    const allowed = [".pdf", ".docx"];
+    const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
+    if (!allowed.includes(ext)) {
+      setAttachError("Please select a valid PDF (.pdf) or Word (.docx) document.");
       return;
     }
 
@@ -233,7 +235,7 @@ export default function ChatInterface({
       }
     } catch (err: any) {
       setAttachError(
-        err.response?.data?.detail || "Could not extract text. This PDF might be scanned or image-only."
+        err.response?.data?.detail || "Could not extract text. Please ensure the document is readable."
       );
     } finally {
       setIsUploadingAttach(false);
@@ -789,7 +791,7 @@ export default function ChatInterface({
             type="file"
             ref={chatFileInputRef}
             onChange={handleAttachFile}
-            accept=".pdf"
+            accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             className="hidden"
           />
 
@@ -798,7 +800,7 @@ export default function ChatInterface({
             type="button"
             onClick={() => chatFileInputRef.current?.click()}
             disabled={isUploadingAttach || isLoading}
-            title="Attach a new PDF document directly to chat"
+            title="Attach a PDF or Word (.docx) document directly to chat"
             className="p-3 rounded-xl bg-white dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 hover:border-sky-400 dark:hover:border-sky-500/50 hover:bg-sky-50/50 dark:hover:bg-slate-900 text-slate-500 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-300 transition-all cursor-pointer disabled:opacity-40 shadow-xs"
           >
             {isUploadingAttach ? (
@@ -814,7 +816,7 @@ export default function ChatInterface({
             onChange={(e) => setInputPrompt(e.target.value)}
             placeholder={
               documents.length === 0
-                ? "Please upload a document or attach PDF to enable AI chat..."
+                ? "Please upload a document or attach PDF / Word doc to enable AI chat..."
                 : selectedDoc
                 ? `Ask anything about ${selectedDoc.filename}...`
                 : "Ask a question across all documents in knowledge base..."

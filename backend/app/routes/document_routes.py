@@ -142,15 +142,17 @@ def _get_or_create_audit(doc_id: str, filename: str, chunks: list, file_path: Op
 @router.post("/upload", response_model=UploadResponse)
 async def upload_document(file: UploadFile = File(...), current_user = Depends(get_current_user)):
     """
-    Upload a Legal Contract PDF, extract pages, chunk content, and index into ChromaDB.
+    Upload a Legal Contract (PDF or Word .docx), extract pages, chunk content, and index into ChromaDB.
     """
-    if not file.filename.lower().endswith(".pdf"):
+    allowed_extensions = {".pdf", ".docx"}
+    file_ext = Path(file.filename).suffix.lower()
+    if file_ext not in allowed_extensions:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only PDF files are supported at this time."
+            detail="Only PDF (.pdf) and Microsoft Word (.docx) documents are supported."
         )
 
-    # Save PDF locally
+    # Save document locally
     file_path = settings.UPLOAD_PATH / file.filename
     try:
         with open(file_path, "wb") as buffer:
@@ -158,17 +160,16 @@ async def upload_document(file: UploadFile = File(...), current_user = Depends(g
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {str(e)}")
 
-    # Extract & Chunk text
+    # Extract & Chunk text (Word .docx, Digital PDF, or Gemini Multimodal OCR)
     try:
-        chunks, total_pages, doc_id = pdf_service.process_pdf(file_path, file.filename)
+        chunks, total_pages, doc_id = pdf_service.process_document(file_path, file.filename)
         
         if not chunks:
             raise HTTPException(
                 status_code=400,
-                detail="Could not extract text from this PDF. It might be scanned or image-only."
+                detail="Could not extract text from this document. Please verify the file contains readable content."
             )
 
-        # Index chunks into Vector Database
         # Index chunks into Vector Database
         vector_service.add_chunks(chunks)
 
@@ -209,19 +210,19 @@ async def upload_document(file: UploadFile = File(...), current_user = Depends(g
 
         return UploadResponse(
             success=True,
-            message=f"Contract '{file.filename}' processed, audited & indexed ({total_pages} pages, {len(chunks)} clauses).",
+            message=f"Document '{file.filename}' processed, audited & indexed ({total_pages} page(s), {len(chunks)} clauses).",
             document=DocumentMetadata(**doc_meta)
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
 
 @router.post("/upload-batch", response_model=BatchUploadResponse)
 async def upload_multiple_documents(files: list[UploadFile] = File(...), current_user = Depends(get_current_user)):
     """
-    Upload multiple PDF documents in one request, extract, chunk, and index into ChromaDB.
+    Upload multiple PDF or Word (.docx) documents in one request, extract, chunk, and index into ChromaDB.
     """
     if not files:
         raise HTTPException(status_code=400, detail="No files provided.")
@@ -231,9 +232,12 @@ async def upload_multiple_documents(files: list[UploadFile] = File(...), current
     all_meta = _load_meta()
     audits_dict = _load_audits()
 
+    allowed_extensions = {".pdf", ".docx"}
+
     for file in files:
-        if not file.filename.lower().endswith(".pdf"):
-            failed_files.append({"filename": file.filename, "reason": "Only PDF files are supported."})
+        file_ext = Path(file.filename).suffix.lower()
+        if file_ext not in allowed_extensions:
+            failed_files.append({"filename": file.filename, "reason": "Only PDF and Word (.docx) files are supported."})
             continue
 
         file_path = settings.UPLOAD_PATH / file.filename
@@ -241,9 +245,9 @@ async def upload_multiple_documents(files: list[UploadFile] = File(...), current
             with open(file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
 
-            chunks, total_pages, doc_id = pdf_service.process_pdf(file_path, file.filename)
+            chunks, total_pages, doc_id = pdf_service.process_document(file_path, file.filename)
             if not chunks:
-                failed_files.append({"filename": file.filename, "reason": "No text extracted (scanned/empty)."})
+                failed_files.append({"filename": file.filename, "reason": "No readable text extracted."})
                 continue
 
             vector_service.add_chunks(chunks)
@@ -338,9 +342,9 @@ async def load_sample_contract(payload: dict, current_user = Depends(get_current
 
     # Extract & Chunk text
     try:
-        chunks, total_pages, doc_id = pdf_service.process_pdf(dest_path, filename)
+        chunks, total_pages, doc_id = pdf_service.process_document(dest_path, filename)
         if not chunks:
-            raise HTTPException(status_code=400, detail="Could not extract text from this sample PDF.")
+            raise HTTPException(status_code=400, detail="Could not extract text from this sample contract.")
 
         # Index chunks
         vector_service.add_chunks(chunks)

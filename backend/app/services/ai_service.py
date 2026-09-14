@@ -2,6 +2,7 @@ import os
 import json
 import re
 from datetime import datetime
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from google import genai
 from google.genai import types
@@ -460,5 +461,44 @@ DOCUMENT EXCERPTS:
             return response_text
 
         return f"### ⚖️ Legal Executive Summary for {filename}\n\nDocument successfully processed and indexed into ChromaDB. Contains {len(sample_chunks)} primary contract clauses ready for deep legal query and risk auditing."
+
+    def ocr_scanned_pdf(self, file_path: Path) -> str:
+        """
+        Transcribes scanned or image-based PDF documents using Gemini multimodal capabilities.
+        Used as an intelligent fallback when traditional extractors find 0 digital text.
+        """
+        client, api_key = self._get_client()
+        if not api_key or not client:
+            print("[OCR] No Google API key configured for Gemini OCR.")
+            return ""
+
+        try:
+            pdf_bytes = file_path.read_bytes()
+            part = types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf")
+            prompt = (
+                "You are an expert legal document transcription OCR engine. "
+                "Accurately and completely transcribe all visible text, clauses, terms, sections, headings, "
+                "and tables from this scanned legal document. Retain original structure, clause numbering, and wording verbatim without adding explanations."
+            )
+
+            default_model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+            candidate_models = [default_model] + [m for m in self.model_candidates if m != default_model]
+
+            for m_name in candidate_models:
+                try:
+                    response = client.models.generate_content(
+                        model=m_name,
+                        contents=[part, prompt]
+                    )
+                    if response and response.text and response.text.strip():
+                        print(f"[OCR] Successfully extracted {len(response.text)} characters using {m_name}")
+                        return response.text.strip()
+                except Exception as e:
+                    print(f"[OCR] Gemini attempt failed on {m_name}: {e}")
+                    continue
+        except Exception as e:
+            print(f"[OCR] Error reading PDF bytes or running OCR on {file_path}: {e}")
+
+        return ""
 
 ai_service = AIService()

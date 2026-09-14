@@ -84,7 +84,7 @@ export default function DocumentList({
 
       {documents.length === 0 ? (
         <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/80 text-center text-xs text-slate-500 dark:text-slate-400">
-          No contracts uploaded yet. Upload a legal agreement PDF (NDA, MSA, Employment) above to begin.
+          No contracts uploaded yet. Upload a legal agreement (PDF or Word .docx) above to begin.
         </div>
       ) : filteredDocs.length === 0 ? (
         <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/80 text-center text-xs text-slate-500 dark:text-slate-400">

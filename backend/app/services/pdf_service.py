@@ -80,7 +80,94 @@ class PDFService:
             except Exception as e:
                 print(f"pypdf fallback error: {e}")
 
+        # 3. Intelligent Fallback: Gemini Multimodal AI OCR for Scanned / Image PDFs
+        if not chunks:
+            try:
+                print(f"[PDFService] No digital text in '{filename}'. Activating Gemini Multimodal OCR fallback...")
+                from app.services.ai_service import ai_service
+                transcribed_text = ai_service.ocr_scanned_pdf(file_path)
+                if transcribed_text and transcribed_text.strip():
+                    if total_pages == 0:
+                        total_pages = max(1, (len(transcribed_text) // 2000) + 1)
+
+                    ocr_chunks = self.splitter.split_text(transcribed_text)
+                    total_chunks = max(1, len(ocr_chunks))
+                    for chunk_idx, chunk_text in enumerate(ocr_chunks):
+                        page_num = min(total_pages, (chunk_idx * total_pages // total_chunks) + 1)
+                        chunks.append({
+                            "chunk_id": f"{doc_id}_p{page_num}_c{chunk_idx}",
+                            "doc_id": doc_id,
+                            "filename": filename,
+                            "page_number": page_num,
+                            "text": chunk_text
+                        })
+                    print(f"[PDFService] AI OCR recovered {len(chunks)} clauses across ~{total_pages} page(s).")
+            except Exception as ocr_err:
+                print(f"[PDFService] AI OCR fallback failed for {filename}: {ocr_err}")
+
         return chunks, total_pages, doc_id
+
+    def process_docx(self, file_path: Path, filename: str) -> Tuple[List[Dict[str, Any]], int, str]:
+        """
+        Reads a Microsoft Word (.docx) document, extracts paragraphs and table text,
+        and chunks content while approximating page distribution.
+        Returns (list_of_chunks_with_metadata, estimated_pages, doc_id).
+        """
+        import docx
+        chunks: List[Dict[str, Any]] = []
+        doc_id = str(uuid.uuid4())
+
+        try:
+            doc = docx.Document(str(file_path))
+
+            # Extract paragraphs
+            paragraph_texts = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+
+            # Extract tables (vital for fee schedules, term tables, indemnities)
+            table_texts = []
+            for table in doc.tables:
+                for row in table.rows:
+                    row_content = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                    if row_content:
+                        deduped = []
+                        for cell_text in row_content:
+                            if not deduped or deduped[-1] != cell_text:
+                                deduped.append(cell_text)
+                        table_texts.append(" | ".join(deduped))
+
+            full_text = "\n\n".join(paragraph_texts + table_texts)
+            if not full_text.strip():
+                return [], 0, doc_id
+
+            # Estimate pages: approx 2500 characters per standard contract page
+            estimated_pages = max(1, (len(full_text) // 2500) + 1)
+            raw_chunks = self.splitter.split_text(full_text)
+
+            total_chunks = max(1, len(raw_chunks))
+            for chunk_idx, chunk_text in enumerate(raw_chunks):
+                page_num = min(estimated_pages, (chunk_idx * estimated_pages // total_chunks) + 1)
+                chunks.append({
+                    "chunk_id": f"{doc_id}_p{page_num}_c{chunk_idx}",
+                    "doc_id": doc_id,
+                    "filename": filename,
+                    "page_number": page_num,
+                    "text": chunk_text
+                })
+
+            return chunks, estimated_pages, doc_id
+        except Exception as e:
+            print(f"python-docx error processing {filename}: {e}")
+            return [], 0, doc_id
+
+    def process_document(self, file_path: Path, filename: str) -> Tuple[List[Dict[str, Any]], int, str]:
+        """
+        Unified document processor routing to Word (.docx) or PDF parser.
+        """
+        ext = Path(filename).suffix.lower()
+        if ext == ".docx":
+            return self.process_docx(file_path, filename)
+        else:
+            return self.process_pdf(file_path, filename)
 
 pdf_service = PDFService()
 

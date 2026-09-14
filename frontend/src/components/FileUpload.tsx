@@ -26,18 +26,23 @@ export default function FileUpload({ onUploadSuccess, onBatchUploadSuccess }: Fi
     const fileArray = Array.from(selectedFiles);
     if (!fileArray || fileArray.length === 0) return;
 
-    // Filter for PDFs
-    const pdfFiles = fileArray.filter((file) => file.name.toLowerCase().endsWith(".pdf"));
-    if (pdfFiles.length === 0) {
+    // Filter for PDFs and Word documents (.docx)
+    const allowedExtensions = [".pdf", ".docx"];
+    const validFormatFiles = fileArray.filter((file) => {
+      const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
+      return allowedExtensions.includes(ext);
+    });
+
+    if (validFormatFiles.length === 0) {
       setUploadStatus({
         type: "error",
-        message: "Please upload PDF documents (.pdf only).",
+        message: "Please upload PDF (.pdf) or Word (.docx) documents.",
       });
       return;
     }
 
     // Check size limit (max 20MB each)
-    const validFiles = pdfFiles.filter((file) => file.size <= 20 * 1024 * 1024);
+    const validFiles = validFormatFiles.filter((file) => file.size <= 20 * 1024 * 1024);
     if (validFiles.length === 0) {
       setUploadStatus({
         type: "error",
@@ -122,7 +127,7 @@ export default function FileUpload({ onUploadSuccess, onBatchUploadSuccess }: Fi
           ref={fileInputRef}
           multiple
           onChange={(e) => e.target.files && handleFiles(e.target.files)}
-          accept=".pdf"
+          accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           className="hidden"
         />
 
@@ -141,19 +146,19 @@ export default function FileUpload({ onUploadSuccess, onBatchUploadSuccess }: Fi
                 "Processing & Indexing Clauses into ChromaDB..."
               ) : (
                 <>
-                  <span>Drag & Drop PDF or</span>
+                  <span>Drag & Drop PDF or Word (.docx), or</span>
                   <span className="text-indigo-600 dark:text-indigo-400 underline decoration-indigo-400/50 underline-offset-2">Browse Files</span>
                 </>
               )}
             </h4>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-              NDAs, MSAs, Employment, SLAs, Vendor Contracts (Max 20MB)
+              PDF, Word (.docx), & Scanned Agreements (Max 20MB)
             </p>
           </div>
 
           <div className="inline-flex items-center gap-1.5 text-[10px] text-indigo-700 dark:text-indigo-300 font-semibold px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-500/15 border border-indigo-200 dark:border-indigo-500/30 shadow-xs">
             <FileUp className="w-3 h-3" />
-            <span>Automated AI Clause & Risk Extraction</span>
+            <span>AI Multimodal OCR & Contract Clause Extraction</span>
           </div>
         </div>
       </div>

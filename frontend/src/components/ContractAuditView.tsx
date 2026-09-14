@@ -132,7 +132,7 @@ export default function ContractAuditView({
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.setAttribute("href", url);
-      link.setAttribute("download", `${selectedDoc.filename.replace(".pdf", "")}_LexiGuard_Report.md`);
+      link.setAttribute("download", `${selectedDoc.filename.replace(/\.(pdf|docx)$/i, "")}_LexiGuard_Report.md`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -351,7 +351,7 @@ export default function ContractAuditView({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${selectedDoc.filename.replace(".pdf", "")}_Due_Diligence_Report.doc`;
+    link.download = `${selectedDoc.filename.replace(/\.(pdf|docx)$/i, "")}_Due_Diligence_Report.doc`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

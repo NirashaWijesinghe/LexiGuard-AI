@@ -104,7 +104,7 @@ export default function OverviewDashboard({
           </div>
 
           <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800/80">
-            <span>Supports: NDAs, MSAs, SLAs, Employment PDFs</span>
+            <span>Supports: PDF, Word (.docx), & Scanned Contracts</span>
             <span>Max 20MB</span>
           </div>
         </div>
