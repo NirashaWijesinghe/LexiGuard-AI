@@ -247,6 +247,18 @@ export default function DashboardPage() {
               <FolderKanban className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               <span>Repository ({documents.length})</span>
             </button>
+
+            {/* Admin-Only Console Navigation Tab */}
+            {user?.role === "admin" && (
+              <Link
+                href="/admin"
+                className="flex items-center gap-2 py-2 px-3.5 rounded-xl text-xs font-bold text-indigo-700 dark:text-sky-300 hover:text-indigo-950 dark:hover:text-white bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 border border-indigo-200 dark:border-indigo-500/40 transition-all shadow-xs cursor-pointer ml-1"
+                title="Open Enterprise Admin Console"
+              >
+                <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                <span>Admin Console</span>
+              </Link>
+            )}
           </nav>
 
           {/* Right Controls: Quick Upload + Health Status + Theme Toggle */}
