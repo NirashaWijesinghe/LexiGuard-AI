@@ -21,7 +21,8 @@ import {
   Moon,
   Upload,
   UserCircle,
-  LogOut
+  LogOut,
+  ChevronDown
 } from "lucide-react";
 import Link from "next/link";
 import OverviewDashboard from "../components/OverviewDashboard";
@@ -56,6 +57,11 @@ export default function DashboardPage() {
     status: "checking",
     has_gemini_key: false,
   });
+
+  const userInitial = user?.email ? user.email.charAt(0).toUpperCase() : "U";
+  const userRawName = user?.email ? user.email.split("@")[0] : "User";
+  const userDisplayName = userRawName.charAt(0).toUpperCase() + userRawName.slice(1);
+  const userRoleLabel = user?.role === "admin" ? "Admin" : "Legal Counsel";
 
   const loadDocs = async () => {
     try {
@@ -249,29 +255,74 @@ export default function DashboardPage() {
               <span className="hidden sm:inline">Upload PDF</span>
             </button>
             
-            {/* User Menu */}
+            {/* User Profile Pill & Dropdown */}
             <div className="relative group ml-2">
-              <button className="flex items-center gap-2 p-1.5 pl-3 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
-                <span className="text-xs font-medium max-w-[100px] truncate">{user?.email}</span>
-                <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center">
-                  <UserCircle className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <button 
+                className="flex items-center gap-2 p-1.5 pl-2 rounded-2xl bg-white dark:bg-slate-800/90 border border-slate-200/90 dark:border-slate-700/80 hover:bg-slate-50 dark:hover:bg-slate-700/80 transition-all shadow-xs cursor-pointer"
+                title={`${userDisplayName} (${user?.email})`}
+              >
+                <div className="relative">
+                  <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-sky-500 text-white font-bold text-xs flex items-center justify-center shadow-xs">
+                    {userInitial}
+                  </div>
+                  <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900" />
                 </div>
+                <div className="flex flex-col text-left pr-1 hidden sm:flex">
+                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-tight">
+                    {userDisplayName}
+                  </span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-400 leading-none">
+                    {userRoleLabel}
+                  </span>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:rotate-180 transition-transform duration-200 ml-0.5" />
               </button>
               
-              <div className="absolute right-0 mt-2 w-48 rounded-xl bg-white dark:bg-[#0c1226] border border-slate-200 dark:border-white/10 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform origin-top-right z-50">
-                <div className="p-2 space-y-1">
+              <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white dark:bg-[#0c1226] border border-slate-200/90 dark:border-slate-700/80 shadow-2xl p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform origin-top-right z-50 backdrop-blur-xl">
+                {/* User Header */}
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80 mb-2 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-sky-500 text-white font-black text-base flex items-center justify-center shadow-md shrink-0">
+                    {userInitial}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                      {userDisplayName}
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate" title={user?.email}>
+                      {user?.email}
+                    </div>
+                    <div className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/60 dark:border-indigo-500/30 text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">
+                      {user?.role === "admin" ? <ShieldCheck className="w-3 h-3 text-emerald-500" /> : <Scale className="w-3 h-3 text-indigo-500" />}
+                      <span>{user?.role === "admin" ? "Enterprise Administrator" : "Legal Counsel Auditor"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
                   {user?.role === "admin" && (
-                    <Link href="/admin" className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+                    <Link 
+                      href="/admin" 
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-500/15 hover:text-indigo-600 dark:hover:text-indigo-300 rounded-xl transition-colors"
+                    >
                       <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                      Admin Dashboard
+                      <span>Admin Management Console</span>
                     </Link>
                   )}
+
+                  <div className="px-3 py-2 flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-100 dark:border-slate-800/80 mt-1 pt-1.5">
+                    <span>Session Status</span>
+                    <span className="flex items-center gap-1.5 text-emerald-500 font-medium">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Active
+                    </span>
+                  </div>
+
                   <button 
                     onClick={logout}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-colors cursor-pointer"
                   >
                     <LogOut className="w-4 h-4" />
-                    Sign out
+                    <span>Sign out</span>
                   </button>
                 </div>
               </div>
