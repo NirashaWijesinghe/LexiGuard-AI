@@ -316,7 +316,11 @@ export default function ChatInterface({
   };
 
   const handleCopyMessage = (content: string, id: string) => {
-    navigator.clipboard.writeText(content);
+    try {
+      navigator.clipboard.writeText(content).catch(() => {});
+    } catch {
+      // Fallback if clipboard API restricted
+    }
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
@@ -431,7 +435,11 @@ export default function ChatInterface({
   const handleCopyTranscript = () => {
     if (messages.length === 0) return;
     const markdown = generateMarkdownTranscript();
-    navigator.clipboard.writeText(markdown);
+    try {
+      navigator.clipboard.writeText(markdown).catch(() => {});
+    } catch {
+      // Fallback if clipboard API restricted
+    }
     setAllCopied(true);
     setTimeout(() => {
       setAllCopied(false);
