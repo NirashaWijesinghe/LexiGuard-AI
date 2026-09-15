@@ -170,9 +170,11 @@ Based on **{len(context_chunks)} relevant sections** retrieved from **{context_c
 
         final_score = min(100, max(0, score))
 
-        if final_score >= 70 or has_critical:
-            level = "CRITICAL" if final_score >= 85 else "HIGH"
-        elif final_score >= 40:
+        if final_score >= 85:
+            level = "CRITICAL"
+        elif final_score >= 65 or has_critical:
+            level = "HIGH"
+        elif final_score >= 35:
             level = "MEDIUM"
         elif final_score >= 15:
             level = "LOW"

@@ -38,6 +38,7 @@ import {
   exportAuditReport,
   DocumentMeta 
 } from "../lib/api";
+import { getRiskTier, getRiskBadgeClasses } from "../lib/riskUtils";
 
 interface ContractAuditViewProps {
   selectedDoc: DocumentMeta | null;
@@ -405,17 +406,9 @@ export default function ContractAuditView({
     ? (auditReport.is_legal_contract === false || auditReport.risk_level === "NON_CONTRACT")
     : (selectedDoc.is_legal_contract === false);
   const score = auditReport?.overall_risk_score ?? selectedDoc.risk_score ?? 50;
-  const currentRiskLevel = auditReport?.risk_level ?? selectedDoc.risk_level ?? (score >= 65 ? "HIGH" : score >= 35 ? "MEDIUM" : "SAFE");
-  const isHighRisk = !isNonContract && (score >= 65 || currentRiskLevel === "HIGH" || currentRiskLevel === "CRITICAL");
-  const isModerateRisk = !isNonContract && !isHighRisk && (score >= 35 || currentRiskLevel === "MEDIUM");
-
-  const scoreColor = isNonContract
-    ? "text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-500/30 bg-sky-50 dark:bg-sky-500/10"
-    : isHighRisk 
-    ? "text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10" 
-    : isModerateRisk 
-    ? "text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10" 
-    : "text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10";
+  const currentRiskLevel = getRiskTier(score, auditReport?.risk_level ?? selectedDoc.risk_level, isNonContract);
+  const riskBadge = getRiskBadgeClasses(currentRiskLevel);
+  const scoreColor = riskBadge.pillClass;
 
   const filteredRisks = (auditReport?.identified_risks || []).filter((r) => {
     // Severity filter

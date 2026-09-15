@@ -23,7 +23,10 @@ import {
   CheckCheck,
   ChevronDown,
   Paperclip,
-  X
+  X,
+  History,
+  Plus,
+  MessageSquare
 } from "lucide-react";
 import { 
   sendChatMessage, 
@@ -78,10 +81,26 @@ export default function ChatInterface({
   const [attachError, setAttachError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showHistoryMenu, setShowHistoryMenu] = useState(false);
   const [allCopied, setAllCopied] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  const historyMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setShowExportMenu(false);
+      }
+      if (historyMenuRef.current && !historyMenuRef.current.contains(event.target as Node)) {
+        setShowHistoryMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const selectedDoc = documents.find((d) => d.doc_id === selectedDocId);
 
@@ -430,7 +449,7 @@ export default function ChatInterface({
   const currentActiveSession = sessions.find((s) => s.id === activeSessionId);
 
   return (
-    <div className="relative flex flex-col h-[740px] bg-white/95 dark:bg-slate-900/50 rounded-3xl border border-slate-200/90 dark:border-slate-800/90 overflow-hidden shadow-[0_12px_36px_-10px_rgba(15,23,42,0.08)] dark:shadow-2xl backdrop-blur-xl">
+    <div className="relative flex flex-col flex-1 h-[calc(100vh-140px)] min-h-[480px] max-h-[850px] bg-white/95 dark:bg-slate-900/50 rounded-3xl border border-slate-200/90 dark:border-slate-800/90 overflow-hidden shadow-[0_12px_36px_-10px_rgba(15,23,42,0.08)] dark:shadow-2xl backdrop-blur-xl">
       {/* Chat Header */}
       <div className="relative z-30 px-5 py-3.5 border-b border-slate-200/90 dark:border-slate-800/80 bg-slate-50/90 dark:bg-slate-900/80 flex items-center justify-between gap-3 backdrop-blur-md">
         <div className="flex items-center gap-3 min-w-0">
@@ -442,22 +461,142 @@ export default function ChatInterface({
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
                 {currentActiveSession ? currentActiveSession.title : "LexiGuard Legal Copilot"}
               </h3>
-              <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-[10px] font-medium border border-emerald-200 dark:border-emerald-500/20 shrink-0">
-                Legal AI Engine
-              </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 truncate">
               {selectedDoc ? (
-                <span className="text-indigo-600 dark:text-sky-400 font-medium">Contract: {selectedDoc.filename}</span>
+                <>
+                  <span className="text-indigo-600 dark:text-sky-400 font-medium truncate">
+                    Contract: {selectedDoc.filename}
+                  </span>
+                  {setSelectedDocId && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDocId(null)}
+                      className="inline-flex items-center gap-1 text-[10px] text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 bg-slate-200/70 dark:bg-slate-800/80 px-1.5 py-0.5 rounded transition-colors cursor-pointer shrink-0"
+                      title="Clear to search across all documents"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                      <span>All Docs</span>
+                    </button>
+                  )}
+                </>
               ) : (
                 <span>All Indexed Contracts</span>
               )}
-            </p>
+            </div>
           </div>
         </div>
 
-        {/* Clean Header Actions (Export Dropdown & Clear only) */}
+        {/* Clean Header Actions (New Chat, History Dropdown, Export Dropdown & Clear) */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* New Chat Button */}
+          <button
+            onClick={() => {
+              onNewChat();
+              setMessages([]);
+            }}
+            className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700/60 bg-slate-100 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 transition-all cursor-pointer shadow-2xs"
+            title="Start a fresh legal consultation"
+          >
+            <Plus className="w-3.5 h-3.5 text-indigo-500" />
+            <span className="hidden sm:inline font-medium">New Chat</span>
+          </button>
+
+          {/* Chat History Dropdown */}
+          <div className="relative z-50" ref={historyMenuRef}>
+            <button
+              onClick={() => setShowHistoryMenu(!showHistoryMenu)}
+              className={`text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                showHistoryMenu
+                  ? "bg-indigo-50 dark:bg-indigo-500/20 border-indigo-300 dark:border-indigo-500/50 text-indigo-700 dark:text-indigo-300 shadow-xs"
+                  : "bg-slate-100 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 shadow-2xs"
+              }`}
+              title="Past Consultations & Chat History"
+            >
+              <History className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
+              <span className="hidden sm:inline font-medium">History</span>
+              {sessions.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-500/30 text-indigo-700 dark:text-indigo-300">
+                  {sessions.length}
+                </span>
+              )}
+              <ChevronDown className="w-3 h-3 text-slate-400" />
+            </button>
+
+            {showHistoryMenu && (
+              <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 rounded-2xl bg-white dark:bg-[#090d24] border border-slate-200 dark:border-slate-700/80 shadow-2xl p-2 z-50 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100 dark:border-slate-800 mb-1.5">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <History className="w-3.5 h-3.5 text-indigo-500" />
+                    Saved History ({sessions.length})
+                  </span>
+                  <button
+                    onClick={() => {
+                      onNewChat();
+                      setMessages([]);
+                      setShowHistoryMenu(false);
+                    }}
+                    className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1 cursor-pointer px-2 py-0.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>New</span>
+                  </button>
+                </div>
+
+                <div className="max-h-64 overflow-y-auto space-y-1 pr-1">
+                  {sessions.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-slate-400 dark:text-slate-500">
+                      No saved chat history found. Start a consultation!
+                    </div>
+                  ) : (
+                    sessions.map((sess) => {
+                      const isActive = activeSessionId === sess.id;
+                      return (
+                        <div
+                          key={sess.id}
+                          onClick={() => {
+                            if (onSelectSession) onSelectSession(sess.id);
+                            setShowHistoryMenu(false);
+                          }}
+                          className={`group p-2 rounded-xl flex items-center justify-between gap-2 text-xs transition-all cursor-pointer ${
+                            isActive
+                              ? "bg-indigo-50 dark:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/40 text-indigo-900 dark:text-indigo-200"
+                              : "hover:bg-slate-50 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300"
+                          }`}
+                        >
+                          <div className="flex items-start gap-2 min-w-0 flex-1">
+                            <MessageSquare className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${isActive ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400"}`} />
+                            <div className="min-w-0 flex-1 text-left">
+                              <div className="font-medium truncate text-xs">{sess.title}</div>
+                              <div className="text-[10px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                                <span>{new Date(sess.updated_at || sess.created_at).toLocaleDateString()}</span>
+                                <span>•</span>
+                                <span>{sess.message_count ?? 0} msgs</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {onDeleteSession && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteSession(sess.id, e);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all cursor-pointer"
+                              title="Delete consultation"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Export Dropdown - Always visible */}
           <div className="relative z-50" ref={exportMenuRef}>
             <button
@@ -542,22 +681,22 @@ export default function ChatInterface({
       </div>
 
       {/* Messages Thread */}
-      <div ref={messagesContainerRef} className="relative z-10 flex-1 overflow-y-auto p-6 space-y-6">
+      <div ref={messagesContainerRef} className="relative z-10 flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-start pt-6 sm:pt-8 text-center max-w-lg mx-auto space-y-4 animate-in fade-in duration-200">
-            <div className="w-14 h-14 rounded-2xl bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/20 flex items-center justify-center text-sky-600 dark:text-sky-400 shadow-md">
-              <Bot className="w-7 h-7" />
+          <div className="h-full flex flex-col items-center justify-center py-2 text-center max-w-lg mx-auto space-y-2.5 animate-in fade-in duration-200">
+            <div className="w-11 h-11 rounded-2xl bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/20 flex items-center justify-center text-sky-600 dark:text-sky-400 shadow-sm">
+              <Bot className="w-5 h-5" />
             </div>
             <div>
-              <h4 className="text-base font-semibold text-slate-800 dark:text-slate-200">Ask LexiGuard Legal Copilot</h4>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              <h4 className="text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-200">Ask LexiGuard Legal Copilot</h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 max-w-sm mx-auto">
                 Retrieve exact contract clauses, verify liability limits, draft counter-clauses, and cite pinpoint page numbers.
               </p>
             </div>
 
             {documents.length > 0 && (
-              <div className="w-full pt-2 space-y-2">
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider">
+              <div className="w-full pt-1 space-y-1.5">
+                <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider">
                   Legal Consultation Quick Actions
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
@@ -567,9 +706,9 @@ export default function ChatInterface({
                       <button
                         key={idx}
                         onClick={() => handleSend(prompt.text)}
-                        className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 hover:border-sky-400 hover:bg-sky-50/50 dark:hover:bg-slate-800/80 text-xs text-slate-700 dark:text-slate-300 transition-all text-left flex items-center gap-2 group cursor-pointer shadow-2xs"
+                        className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 hover:border-sky-400 hover:bg-sky-50/50 dark:hover:bg-slate-800/80 text-xs text-slate-700 dark:text-slate-300 transition-all text-left flex items-center gap-2 group cursor-pointer shadow-2xs"
                       >
-                        <div className="p-1.5 rounded-lg bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 group-hover:bg-sky-100 dark:group-hover:bg-sky-500/20 transition-colors">
+                        <div className="p-1.5 rounded-lg bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 group-hover:bg-sky-100 dark:group-hover:bg-sky-500/20 transition-colors shrink-0">
                           <Icon className="w-3.5 h-3.5" />
                         </div>
                         <span className="font-medium truncate">{prompt.label}</span>
@@ -710,7 +849,7 @@ export default function ChatInterface({
       </div>
 
       {/* Input Field & Prompt Chips */}
-      <div className="p-4 border-t border-slate-200 dark:border-slate-800/80 bg-slate-50/80 dark:bg-slate-900/90 flex flex-col gap-2">
+      <div className="p-3 sm:p-4 border-t border-slate-200 dark:border-slate-800/80 bg-slate-50/80 dark:bg-slate-900/90 flex flex-col gap-2">
         {/* Attachment Error Banner */}
         {attachError && (
           <div className="flex items-center justify-between p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800/60 text-xs text-rose-700 dark:text-rose-300 animate-fadeIn">
@@ -727,31 +866,7 @@ export default function ChatInterface({
           </div>
         )}
 
-        {/* Attached Document Pill / Context Bar */}
-        {selectedDoc && (
-          <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/40 text-xs animate-fadeIn">
-            <div className="flex items-center gap-2 text-sky-800 dark:text-sky-300 min-w-0">
-              <Paperclip className="w-3.5 h-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
-              <span className="font-medium truncate max-w-[280px] sm:max-w-[400px]">
-                Target Document: {selectedDoc.filename}
-              </span>
-              <span className="text-[10px] text-sky-600/80 dark:text-sky-400/80 shrink-0">
-                ({selectedDoc.total_pages} pages, {selectedDoc.file_size_kb} KB)
-              </span>
-            </div>
-            {setSelectedDocId && (
-              <button
-                type="button"
-                onClick={() => setSelectedDocId(null)}
-                className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-300 px-2 py-0.5 rounded-md hover:bg-slate-200 dark:hover:bg-slate-800/80 transition-colors cursor-pointer shrink-0"
-                title="Switch scope to search across all documents"
-              >
-                <span>Query All Docs</span>
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-        )}
+
 
         {selectedDoc && (
           <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">

@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { FileText, Trash2, Search, Sparkles, X, AlertTriangle, Scale, ShieldAlert, ShieldCheck } from "lucide-react";
 import { DocumentMeta, deleteDocument } from "../lib/api";
+import { getRiskTier, getRiskBadgeClasses } from "../lib/riskUtils";
 
 interface DocumentListProps {
   documents: DocumentMeta[];
@@ -131,16 +132,18 @@ export default function DocumentList({
                           </span>
                         </>
                       ) : (
-                        hasRisk && (
-                          <>
-                            <span>•</span>
-                            <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
-                              isHigh ? "bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-400" : isMed ? "bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400" : "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-                            }`}>
-                              Risk: {doc.risk_score}/100
-                            </span>
-                          </>
-                        )
+                        hasRisk && (() => {
+                          const tier = getRiskTier(doc.risk_score, doc.risk_level, isNonContract);
+                          const badgeClasses = getRiskBadgeClasses(tier);
+                          return (
+                            <>
+                              <span>•</span>
+                              <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold border ${badgeClasses.pillClass}`}>
+                                Risk: {doc.risk_score}/100 ({tier})
+                              </span>
+                            </>
+                          );
+                        })()
                       )}
                     </div>
                   </div>

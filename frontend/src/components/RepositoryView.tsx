@@ -17,6 +17,7 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { DocumentMeta, deleteDocument } from "../lib/api";
+import { isHighRiskDoc, isMedRiskDoc, isSafeDoc, getRiskTier, getRiskBadgeClasses } from "../lib/riskUtils";
 
 interface RepositoryViewProps {
   documents: DocumentMeta[];
@@ -50,22 +51,6 @@ export default function RepositoryView({
     } finally {
       setIsDeleting(false);
     }
-  };
-
-  const isHighRiskDoc = (d: DocumentMeta) => {
-    const level = (d.risk_level || "").toUpperCase();
-    const score = d.risk_score;
-    return (score !== null && score !== undefined && score >= 65) || level === "HIGH" || level === "CRITICAL";
-  };
-
-  const isMedRiskDoc = (d: DocumentMeta) => {
-    const level = (d.risk_level || "").toUpperCase();
-    const score = d.risk_score;
-    return (score !== null && score !== undefined && score >= 35 && score < 65) || level === "MEDIUM";
-  };
-
-  const isSafeDoc = (d: DocumentMeta) => {
-    return !isHighRiskDoc(d) && !isMedRiskDoc(d);
   };
 
   const filteredDocs = [...documents]
@@ -184,8 +169,8 @@ export default function RepositoryView({
           {filteredDocs.map((doc) => {
             const isNonContract = doc.is_legal_contract === false || doc.risk_level === "NON_CONTRACT";
             const score = doc.risk_score ?? 0;
-            const isHigh = isHighRiskDoc(doc);
-            const isMed = isMedRiskDoc(doc);
+            const tier = getRiskTier(doc.risk_score, doc.risk_level, isNonContract);
+            const badgeClasses = getRiskBadgeClasses(tier);
 
             return (
               <div
@@ -222,15 +207,11 @@ export default function RepositoryView({
 
                 {/* Right: Risk Badge & Action Buttons */}
                 <div className="flex items-center justify-between lg:justify-end gap-3 shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100 dark:border-slate-800/80">
-                  <span className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
-                    isHigh 
-                      ? "bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/30" 
-                      : isMed 
-                      ? "bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30" 
-                      : "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30"
-                  }`}>
-                    {doc.risk_score !== null && doc.risk_score !== undefined
-                      ? `Risk Score: ${score}/100 (${doc.risk_level || "SAFE"})`
+                  <span className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${badgeClasses.pillClass}`}>
+                    {isNonContract
+                      ? (doc.document_category || "Non-Contract Doc")
+                      : doc.risk_score !== null && doc.risk_score !== undefined
+                      ? `Risk Score: ${score}/100 (${tier})`
                       : "Ready to Audit"}
                   </span>
 

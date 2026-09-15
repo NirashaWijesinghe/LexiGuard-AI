@@ -96,45 +96,52 @@ def _save_hash_cache(data: dict):
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
-def _compute_document_hash(file_path: Optional[Path], chunks: list) -> str:
+def _compute_document_hashes(file_path: Optional[Path], chunks: list) -> list[str]:
     """
-    Computes a content-based SHA-256 fingerprint from the extracted contract clauses and/or file.
-    Identical agreement text produces the exact same hash.
+    Computes content-based SHA-256 fingerprints from both raw file bytes and extracted chunks.
+    Identical agreement files or text produce identical matching hashes.
     """
+    hashes = []
+    if file_path and file_path.exists():
+        try:
+            hashes.append(hashlib.sha256(file_path.read_bytes()).hexdigest())
+        except Exception:
+            pass
     if chunks:
         combined_text = "\n".join(str(c.get("text", "")) for c in chunks)
-        return hashlib.sha256(combined_text.strip().encode("utf-8")).hexdigest()
-    if file_path and file_path.exists():
-        return hashlib.sha256(file_path.read_bytes()).hexdigest()
-    return ""
+        hashes.append(hashlib.sha256(combined_text.strip().encode("utf-8")).hexdigest())
+    return [h for h in hashes if h]
 
 def _get_or_create_audit(doc_id: str, filename: str, chunks: list, file_path: Optional[Path] = None, force_refresh: bool = False) -> ContractAuditReport:
     """
     Returns cached audit report if an identical contract content hash was already audited,
     guaranteeing 100% score consistency across duplicate uploads. Otherwise runs AI audit.
     """
-    content_hash = _compute_document_hash(file_path, chunks)
+    hashes = _compute_document_hashes(file_path, chunks)
     hash_cache = _load_hash_cache()
 
-    if not force_refresh and content_hash and content_hash in hash_cache:
-        cached_data = dict(hash_cache[content_hash])
-        # Never serve cached mock fallback audits
-        if cached_data.get("key_parties") != ["Party 1", "Party 2"]:
-            cached_data["doc_id"] = doc_id
-            cached_data["filename"] = filename
-            cached_data["audit_timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            report = ContractAuditReport(**cached_data)
-            
-            audits_dict = _load_audits()
-            audits_dict[doc_id] = report.model_dump()
-            _save_audits(audits_dict)
-            return report
+    if not force_refresh:
+        for h in hashes:
+            if h in hash_cache:
+                cached_data = dict(hash_cache[h])
+                # Never serve cached mock fallback audits
+                if cached_data.get("key_parties") != ["Party 1", "Party 2"]:
+                    cached_data["doc_id"] = doc_id
+                    cached_data["filename"] = filename
+                    cached_data["audit_timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    report = ContractAuditReport(**cached_data)
+                    
+                    audits_dict = _load_audits()
+                    audits_dict[doc_id] = report.model_dump()
+                    _save_audits(audits_dict)
+                    return report
 
     report = ai_service.audit_contract(doc_id, filename, chunks)
 
-    # Only cache genuine AI audit reports (not mock fallback)
-    if content_hash and report.key_parties != ["Party 1", "Party 2"]:
-        hash_cache[content_hash] = report.model_dump()
+    # Only cache genuine AI audit reports (not mock fallback) under all matching hashes
+    if report.key_parties != ["Party 1", "Party 2"]:
+        for h in hashes:
+            hash_cache[h] = report.model_dump()
         _save_hash_cache(hash_cache)
 
     audits_dict = _load_audits()
@@ -427,10 +434,14 @@ async def list_documents(current_user = Depends(get_current_user)):
         if doc_user_id == current_user_id:
             doc_data = dict(doc)
             file_path = settings.UPLOAD_PATH / doc.get("filename", "")
-            content_hash = hashlib.sha256(file_path.read_bytes()).hexdigest() if file_path.exists() else ""
+            content_hashes = _compute_document_hashes(file_path, [])
+            cached = None
+            for h in content_hashes:
+                if h in hash_cache:
+                    cached = hash_cache[h]
+                    break
 
-            if content_hash and content_hash in hash_cache:
-                cached = hash_cache[content_hash]
+            if cached:
                 doc_data["risk_score"] = cached.get("overall_risk_score")
                 doc_data["risk_level"] = cached.get("risk_level")
                 doc_data["is_legal_contract"] = cached.get("is_legal_contract", True)
@@ -497,10 +508,14 @@ async def get_document_audit(doc_id: str, current_user = Depends(get_current_use
         doc_info = meta_dict[doc_id]
         file_path = settings.UPLOAD_PATH / doc_info.get("filename", "")
         if file_path.exists():
-            content_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
+            content_hashes = _compute_document_hashes(file_path, [])
             hash_cache = _load_hash_cache()
-            if content_hash in hash_cache:
-                cached_data = dict(hash_cache[content_hash])
+            cached_data = None
+            for h in content_hashes:
+                if h in hash_cache:
+                    cached_data = dict(hash_cache[h])
+                    break
+            if cached_data:
                 cached_data["doc_id"] = doc_id
                 cached_data["filename"] = doc_info.get("filename", "Document.pdf")
                 report = ContractAuditReport(**cached_data)

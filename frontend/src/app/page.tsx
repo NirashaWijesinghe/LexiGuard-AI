@@ -365,7 +365,7 @@ export default function DashboardPage() {
       )}
 
       {/* Main Workspace Container */}
-      <main className="relative z-10 flex-1 max-w-7xl w-full mx-auto p-6 flex flex-col">
+      <main className={`relative z-10 flex-1 max-w-7xl w-full mx-auto flex flex-col ${activeTab === "copilot" ? "p-3 sm:p-4 pb-2" : "p-6"}`}>
         {activeTab === "overview" && (
           <OverviewDashboard
             documents={documents}
@@ -412,7 +412,7 @@ export default function DashboardPage() {
         )}
 
         {activeTab === "copilot" && (
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col min-h-0">
             <ChatInterface
               documents={documents}
               selectedDocId={selectedDocId}
