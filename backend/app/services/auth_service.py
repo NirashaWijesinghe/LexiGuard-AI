@@ -93,7 +93,11 @@ class AuthService:
         try:
             from app.services.cloud_store import cloud_store
             if cloud_store.is_configured():
-                u = cloud_store.get(f"user_auth:{clean_email}")
+                users_map = cloud_store.get("users_auth_map") or {}
+                u = users_map.get(clean_email)
+                if not u:
+                    u = cloud_store.get(f"user_auth:{clean_email}")
+
                 if u and isinstance(u, dict) and u.get("password_hash"):
                     # Cache into SQLite
                     try:
@@ -126,18 +130,12 @@ class AuthService:
         try:
             from app.services.cloud_store import cloud_store
             if cloud_store.is_configured():
+                users_map = cloud_store.get("users_auth_map") or {}
+                for _, u in users_map.items():
+                    if isinstance(u, dict) and u.get("id") == user_id:
+                        return u
                 u = cloud_store.get(f"user_auth_id:{user_id}")
                 if u and isinstance(u, dict):
-                    try:
-                        with self._get_connection() as conn:
-                            cursor = conn.cursor()
-                            cursor.execute(
-                                "INSERT OR REPLACE INTO users (id, email, password_hash, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                                (u["id"], u["email"], u["password_hash"], u.get("name", ""), u.get("role", "user"), u.get("created_at", ""))
-                            )
-                            conn.commit()
-                    except Exception:
-                        pass
                     return u
         except Exception:
             pass
@@ -180,8 +178,15 @@ class AuthService:
         try:
             from app.services.cloud_store import cloud_store
             if cloud_store.is_configured():
+                # Store in users_auth_map (centralized dictionary)
+                users_map = cloud_store.get("users_auth_map") or {}
+                users_map[clean_email] = user_record
+                cloud_store.set("users_auth_map", users_map)
+
+                # Also store individual key
                 cloud_store.set(f"user_auth:{clean_email}", user_record)
                 cloud_store.set(f"user_auth_id:{user_id}", user_record)
+
                 reg_users = cloud_store.get("registered_users") or []
                 filtered_users = [u for u in reg_users if u.get("email") != clean_email]
                 filtered_users.append({

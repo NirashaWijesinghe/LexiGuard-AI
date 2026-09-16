@@ -38,8 +38,10 @@ class CloudStore:
         if not self.is_configured():
             return default
         try:
+            import urllib.parse
+            encoded_key = urllib.parse.quote(key, safe="")
             req = urllib.request.Request(
-                f"{self.url.rstrip('/')}/get/{key}",
+                f"{self.url.rstrip('/')}/get/{encoded_key}",
                 headers={"Authorization": f"Bearer {self.token}"}
             )
             with urllib.request.urlopen(req, timeout=6) as res:
@@ -59,9 +61,11 @@ class CloudStore:
         if not self.is_configured():
             return False
         try:
+            import urllib.parse
+            encoded_key = urllib.parse.quote(key, safe="")
             payload = json.dumps(value).encode("utf-8") if not isinstance(value, str) else value.encode("utf-8")
             req = urllib.request.Request(
-                f"{self.url.rstrip('/')}/set/{key}",
+                f"{self.url.rstrip('/')}/set/{encoded_key}",
                 data=payload,
                 headers={
                     "Authorization": f"Bearer {self.token}",
@@ -72,6 +76,22 @@ class CloudStore:
                 return res.status == 200
         except Exception as e:
             print(f"[CloudStore] Warning setting key '{key}': {e}")
+            return False
+
+    def delete(self, key: str) -> bool:
+        if not self.is_configured():
+            return False
+        try:
+            import urllib.parse
+            encoded_key = urllib.parse.quote(key, safe="")
+            req = urllib.request.Request(
+                f"{self.url.rstrip('/')}/del/{encoded_key}",
+                headers={"Authorization": f"Bearer {self.token}"}
+            )
+            with urllib.request.urlopen(req, timeout=6) as res:
+                return res.status == 200
+        except Exception as e:
+            print(f"[CloudStore] Warning deleting key '{key}': {e}")
             return False
 
 cloud_store = CloudStore()
