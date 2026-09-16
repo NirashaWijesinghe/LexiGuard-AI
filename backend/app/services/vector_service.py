@@ -1,6 +1,11 @@
+import os
 import chromadb
 from typing import List, Dict, Any, Optional
 from app.config import settings
+
+if os.environ.get("VERCEL"):
+    os.environ.setdefault("XDG_CACHE_HOME", "/tmp/cache")
+    os.environ.setdefault("CHROMA_CACHE_DIR", "/tmp/cache")
 
 class VectorService:
     def __init__(self):
@@ -32,11 +37,14 @@ class VectorService:
             for c in chunks
         ]
 
-        self.collection.upsert(
-            ids=ids,
-            documents=documents,
-            metadatas=metadatas
-        )
+        try:
+            self.collection.upsert(
+                ids=ids,
+                documents=documents,
+                metadatas=metadatas
+            )
+        except Exception as e:
+            print(f"[VectorService] Warning: ChromaDB indexing fallback: {e}")
 
     def query_relevant_chunks(
         self, 

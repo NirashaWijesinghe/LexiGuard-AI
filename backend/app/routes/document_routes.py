@@ -24,6 +24,7 @@ router = APIRouter(prefix="/api/documents", tags=["Documents"])
 # Metadata storage file
 META_FILE = settings.UPLOAD_PATH / "documents_meta.json"
 AUDIT_FILE = settings.UPLOAD_PATH / "contracts_audit.json"
+CACHE_FILE = settings.UPLOAD_PATH / "audit_hash_cache.json"
 _candidate_sample_dirs = [
     Path(__file__).resolve().parent.parent.parent / "sample_contracts",
     Path(__file__).resolve().parent.parent / "sample_contracts",
@@ -317,9 +318,10 @@ async def upload_multiple_documents(files: list[UploadFile] = File(...), current
     _save_audits(audits_dict)
     _save_meta(all_meta)
 
+    error_msg = f"Failed to index: {failed_files[0]['reason']}" if failed_files and not successful_docs else f"Successfully indexed {len(successful_docs)} of {len(files)} document(s)."
     return BatchUploadResponse(
         success=len(successful_docs) > 0,
-        message=f"Successfully indexed {len(successful_docs)} of {len(files)} document(s).",
+        message=error_msg,
         total_uploaded=len(successful_docs),
         successful_documents=successful_docs,
         failed_files=failed_files
