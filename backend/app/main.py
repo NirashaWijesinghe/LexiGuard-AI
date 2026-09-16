@@ -39,12 +39,24 @@ app.include_router(session_router)
 
 @app.get("/api/health", tags=["Health"])
 async def health_check():
+    from app.services.cloud_store import cloud_store
     return {
         "status": "healthy",
         "app": settings.PROJECT_NAME,
         "version": settings.VERSION,
         "gemini_model": settings.GEMINI_MODEL,
-        "has_gemini_key": bool(settings.GOOGLE_API_KEY)
+        "has_gemini_key": bool(settings.GOOGLE_API_KEY),
+        "cloud_store_connected": cloud_store.is_configured()
+    }
+
+@app.get("/api/db-check")
+def db_check():
+    import os
+    from app.services.cloud_store import cloud_store
+    keys = [k for k in os.environ.keys() if any(w in k for w in ["KV", "REDIS", "UPSTASH"])]
+    return {
+        "cloud_store_connected": cloud_store.is_configured(),
+        "matched_env_keys": keys
     }
 
 @app.get("/", tags=["Root"])

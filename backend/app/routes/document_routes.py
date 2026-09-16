@@ -9,6 +9,7 @@ from app.config import settings
 from app.services.pdf_service import pdf_service
 from app.services.vector_service import vector_service
 from app.services.ai_service import ai_service
+from app.services.cloud_store import cloud_store
 from app.models.schemas import (
     UploadResponse, 
     DocumentMetadata, 
@@ -63,6 +64,10 @@ SAMPLE_CATALOG = [
 ]
 
 def _load_meta() -> dict:
+    if cloud_store.is_configured():
+        cloud_data = cloud_store.get("documents_meta")
+        if isinstance(cloud_data, dict):
+            return cloud_data
     if META_FILE.exists():
         try:
             with open(META_FILE, "r", encoding="utf-8") as f:
@@ -72,10 +77,19 @@ def _load_meta() -> dict:
     return {}
 
 def _save_meta(data: dict):
-    with open(META_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+    if cloud_store.is_configured():
+        cloud_store.set("documents_meta", data)
+    try:
+        with open(META_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception:
+        pass
 
 def _load_audits() -> dict:
+    if cloud_store.is_configured():
+        cloud_data = cloud_store.get("contracts_audit")
+        if isinstance(cloud_data, dict):
+            return cloud_data
     if AUDIT_FILE.exists():
         try:
             with open(AUDIT_FILE, "r", encoding="utf-8") as f:
@@ -85,10 +99,19 @@ def _load_audits() -> dict:
     return {}
 
 def _save_audits(data: dict):
-    with open(AUDIT_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+    if cloud_store.is_configured():
+        cloud_store.set("contracts_audit", data)
+    try:
+        with open(AUDIT_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception:
+        pass
 
 def _load_hash_cache() -> dict:
+    if cloud_store.is_configured():
+        cloud_data = cloud_store.get("audit_hash_cache")
+        if isinstance(cloud_data, dict):
+            return cloud_data
     if CACHE_FILE.exists():
         try:
             with open(CACHE_FILE, "r", encoding="utf-8") as f:
@@ -98,8 +121,13 @@ def _load_hash_cache() -> dict:
     return {}
 
 def _save_hash_cache(data: dict):
-    with open(CACHE_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+    if cloud_store.is_configured():
+        cloud_store.set("audit_hash_cache", data)
+    try:
+        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception:
+        pass
 
 def _compute_document_hashes(file_path: Optional[Path], chunks: list) -> list[str]:
     """
