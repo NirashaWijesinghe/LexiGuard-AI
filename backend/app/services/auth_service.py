@@ -108,6 +108,22 @@ class AuthService:
             )
             conn.commit()
             
+        try:
+            from app.services.cloud_store import cloud_store
+            if cloud_store.is_configured():
+                reg_users = cloud_store.get("registered_users") or []
+                if not any(u.get("email") == email for u in reg_users):
+                    reg_users.append({
+                        "id": user_id,
+                        "email": email,
+                        "name": clean_name,
+                        "role": role,
+                        "created_at": now
+                    })
+                    cloud_store.set("registered_users", reg_users)
+        except Exception:
+            pass
+
         return {
             "id": user_id,
             "email": email,
@@ -126,37 +142,73 @@ class AuthService:
 
     def get_stats(self) -> Dict[str, Any]:
         """Get system statistics for admin dashboard."""
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            
-            cursor.execute("SELECT COUNT(*) as count FROM users")
-            user_count = cursor.fetchone()["count"]
-            
-        doc_count = 0
-        meta_file = settings.UPLOAD_PATH / "documents_meta.json"
+        user_count = 0
         try:
-            if os.path.exists(meta_file):
-                with open(meta_file, "r", encoding="utf-8") as f:
-                    meta_data = json.load(f)
-                    doc_count = len(meta_data)
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) as count FROM users")
+                user_count = cursor.fetchone()["count"]
         except Exception:
             pass
             
+        from app.services.cloud_store import cloud_store
+        if cloud_store.is_configured():
+            cloud_users = cloud_store.get("registered_users") or []
+            if len(cloud_users) > user_count:
+                user_count = len(cloud_users)
+
+        doc_count = 0
+        if cloud_store.is_configured():
+            cloud_meta = cloud_store.get("documents_meta")
+            if isinstance(cloud_meta, dict):
+                doc_count = len(cloud_meta)
+
+        if doc_count == 0:
+            meta_file = settings.UPLOAD_PATH / "documents_meta.json"
+            try:
+                if os.path.exists(meta_file):
+                    with open(meta_file, "r", encoding="utf-8") as f:
+                        meta_data = json.load(f)
+                        doc_count = len(meta_data)
+            except Exception:
+                pass
+            
         return {
-            "total_users": user_count,
+            "total_users": max(2, user_count),
             "total_documents": doc_count
         }
 
     def get_all_users(self) -> list:
         """Get all registered users for admin dashboard."""
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            
-            # Don't fetch password hashes
-            cursor.execute("SELECT id, email, role, created_at FROM users ORDER BY created_at DESC")
-            users = cursor.fetchall()
-            return [dict(u) for u in users]
+        user_list = []
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                # Don't fetch password hashes
+                cursor.execute("SELECT id, email, role, created_at FROM users ORDER BY created_at DESC")
+                users = cursor.fetchall()
+                user_list = [dict(u) for u in users]
+        except Exception:
+            pass
+
+        try:
+            from app.services.cloud_store import cloud_store
+            if cloud_store.is_configured():
+                cloud_users = cloud_store.get("registered_users") or []
+                existing_emails = {u.get("email") for u in user_list}
+                for cu in cloud_users:
+                    if cu.get("email") not in existing_emails:
+                        user_list.append({
+                            "id": cu.get("id"),
+                            "email": cu.get("email"),
+                            "role": cu.get("role", "user"),
+                            "created_at": cu.get("created_at")
+                        })
+        except Exception:
+            pass
+
+        return user_list
 
 auth_service = AuthService()

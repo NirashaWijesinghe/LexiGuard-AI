@@ -529,15 +529,50 @@ async def perform_contract_audit(doc_id: str, current_user = Depends(get_current
         raise HTTPException(status_code=404, detail="Document not found")
 
     doc_info = meta_dict[doc_id]
-    if doc_info.get("user_id") and doc_info.get("user_id") != current_user["id"]:
+    is_admin = current_user.get("role") == "admin"
+    user_email = (current_user.get("email") or "").lower().strip()
+    doc_email = (doc_info.get("user_email") or "").lower().strip()
+
+    is_owner = (
+        is_admin 
+        or (doc_info.get("user_id") == current_user["id"])
+        or (user_email and doc_email == user_email)
+        or (not doc_info.get("user_id"))
+    )
+    if not is_owner:
         raise HTTPException(status_code=403, detail="Not authorized to access this document")
 
     chunks = vector_service.get_document_chunks(doc_id, limit=20)
+    if not chunks and cloud_store.is_configured():
+        cloud_chunks = cloud_store.get(f"doc_chunks:{doc_id}")
+        if cloud_chunks and isinstance(cloud_chunks, list):
+            chunks = cloud_chunks[:20]
+
+    if not chunks:
+        # Fallback: check if the document file exists in UPLOAD_PATH or SAMPLE_CONTRACTS_DIR
+        candidate_paths = [
+            settings.UPLOAD_PATH / doc_info.get("filename", ""),
+            SAMPLE_CONTRACTS_DIR / doc_info.get("filename", ""),
+            Path("sample_contracts") / doc_info.get("filename", "")
+        ]
+        for p in candidate_paths:
+            if p.exists():
+                try:
+                    ext_chunks, _, _ = pdf_service.process_document(p, doc_info.get("filename", ""))
+                    if ext_chunks:
+                        chunks = ext_chunks[:20]
+                        vector_service.add_chunks(ext_chunks)
+                        if cloud_store.is_configured():
+                            cloud_store.set(f"doc_chunks:{doc_id}", ext_chunks)
+                        break
+                except Exception as ex:
+                    print(f"[perform_contract_audit] Fallback extraction error: {ex}")
+
     if not chunks:
         raise HTTPException(status_code=400, detail="No indexed clauses available for this contract.")
 
     # Run fresh AI audit (force_refresh=True to bypass hash cache)
-    file_path = settings.UPLOAD_PATH / doc_info["filename"]
+    file_path = settings.UPLOAD_PATH / doc_info.get("filename", "")
     audit_report = _get_or_create_audit(doc_id, doc_info["filename"], chunks, file_path, force_refresh=True)
 
     # Update metadata with risk score & classification
@@ -554,12 +589,27 @@ async def get_document_audit(doc_id: str, current_user = Depends(get_current_use
     """
     Get the full audit report for a specific document, or generate a new one if not yet audited.
     """
+    meta_dict = _load_meta()
+    if doc_id in meta_dict:
+        doc_info = meta_dict[doc_id]
+        is_admin = current_user.get("role") == "admin"
+        user_email = (current_user.get("email") or "").lower().strip()
+        doc_email = (doc_info.get("user_email") or "").lower().strip()
+
+        is_owner = (
+            is_admin 
+            or (doc_info.get("user_id") == current_user["id"])
+            or (user_email and doc_email == user_email)
+            or (not doc_info.get("user_id"))
+        )
+        if not is_owner:
+            raise HTTPException(status_code=403, detail="Not authorized to access this document")
+
     audits_dict = _load_audits()
     if doc_id in audits_dict:
         return ContractAuditReport(**audits_dict[doc_id])
 
     # Check if this document content was already audited under another doc_id / cached hash
-    meta_dict = _load_meta()
     if doc_id in meta_dict:
         doc_info = meta_dict[doc_id]
         file_path = settings.UPLOAD_PATH / doc_info.get("filename", "")
@@ -590,6 +640,20 @@ async def export_audit_markdown(doc_id: str, current_user = Depends(get_current_
     meta_dict = _load_meta()
     if doc_id not in meta_dict:
         raise HTTPException(status_code=404, detail="Document not found")
+
+    doc_info = meta_dict[doc_id]
+    is_admin = current_user.get("role") == "admin"
+    user_email = (current_user.get("email") or "").lower().strip()
+    doc_email = (doc_info.get("user_email") or "").lower().strip()
+
+    is_owner = (
+        is_admin 
+        or (doc_info.get("user_id") == current_user["id"])
+        or (user_email and doc_email == user_email)
+        or (not doc_info.get("user_id"))
+    )
+    if not is_owner:
+        raise HTTPException(status_code=403, detail="Not authorized to access this document")
 
     audits_dict = _load_audits()
     if doc_id not in audits_dict:
@@ -697,7 +761,7 @@ This document was verified as a **{doc_category}** rather than an executable com
     }
 
 @router.post("/{doc_id}/summarize")
-async def summarize_document(doc_id: str):
+async def summarize_document(doc_id: str, current_user = Depends(get_current_user)):
     """
     Generates an executive legal summary and key takeaways for a specific document.
     """
@@ -706,7 +770,38 @@ async def summarize_document(doc_id: str):
         raise HTTPException(status_code=404, detail="Document not found")
 
     doc_info = meta_dict[doc_id]
+    is_admin = current_user.get("role") == "admin"
+    user_email = (current_user.get("email") or "").lower().strip()
+    doc_email = (doc_info.get("user_email") or "").lower().strip()
+
+    is_owner = (
+        is_admin 
+        or (doc_info.get("user_id") == current_user["id"])
+        or (user_email and doc_email == user_email)
+        or (not doc_info.get("user_id"))
+    )
+    if not is_owner:
+        raise HTTPException(status_code=403, detail="Not authorized to access this document")
+
     chunks = vector_service.get_document_chunks(doc_id, limit=8)
+    if not chunks:
+        candidate_paths = [
+            settings.UPLOAD_PATH / doc_info.get("filename", ""),
+            SAMPLE_CONTRACTS_DIR / doc_info.get("filename", ""),
+            Path("sample_contracts") / doc_info.get("filename", "")
+        ]
+        for p in candidate_paths:
+            if p.exists():
+                try:
+                    ext_chunks, _, _ = pdf_service.process_document(p, doc_info.get("filename", ""))
+                    if ext_chunks:
+                        chunks = ext_chunks[:8]
+                        if cloud_store.is_configured():
+                            cloud_store.set(f"doc_chunks:{doc_id}", ext_chunks)
+                        break
+                except Exception:
+                    pass
+
     if not chunks:
         raise HTTPException(status_code=400, detail="No indexed chunks available for this document.")
 
@@ -727,11 +822,28 @@ async def delete_document(doc_id: str, current_user = Depends(get_current_user))
         raise HTTPException(status_code=404, detail="Document not found")
 
     doc_info = meta_dict[doc_id]
-    if doc_info.get("user_id") and doc_info.get("user_id") != current_user["id"] and current_user.get("role") != "admin":
+    is_admin = current_user.get("role") == "admin"
+    user_email = (current_user.get("email") or "").lower().strip()
+    doc_email = (doc_info.get("user_email") or "").lower().strip()
+
+    is_owner = (
+        is_admin 
+        or (doc_info.get("user_id") == current_user["id"])
+        or (user_email and doc_email == user_email)
+        or (not doc_info.get("user_id"))
+    )
+    if not is_owner:
         raise HTTPException(status_code=403, detail="Not authorized to delete this document")
 
     # Delete from ChromaDB
     vector_service.delete_document(doc_id)
+
+    # Delete chunks from CloudStore
+    if cloud_store.is_configured():
+        try:
+            cloud_store.delete(f"doc_chunks:{doc_id}")
+        except Exception:
+            pass
 
     # Delete from audits if present
     audits_dict = _load_audits()
