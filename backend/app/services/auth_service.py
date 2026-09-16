@@ -77,56 +77,127 @@ class AuthService:
         encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
         return encoded_jwt
 
-    def get_user_by_email(self, email: str) -> Optional[sqlite3.Row]:
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
-            return cursor.fetchone()
+    def get_user_by_email(self, email: str):
+        clean_email = email.lower().strip()
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM users WHERE LOWER(email) = ?", (clean_email,))
+                row = cursor.fetchone()
+                if row:
+                    return dict(row)
+        except Exception:
+            pass
 
-    def get_user_by_id(self, user_id: str) -> Optional[sqlite3.Row]:
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-            return cursor.fetchone()
-
-    def register_user(self, email: str, password: str, name: str = "", role: str = "user") -> Dict[str, Any]:
-        existing_user = self.get_user_by_email(email)
-        if existing_user:
-            raise HTTPException(status_code=400, detail="Email already registered")
-        
-        import hashlib
-        user_id = hashlib.md5(email.lower().strip().encode("utf-8")).hexdigest()
-        hashed_password = self.get_password_hash(password)
-        now = datetime.utcnow().isoformat()
-        clean_name = name.strip() if name else ""
-        
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO users (id, email, password_hash, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (user_id, email, hashed_password, clean_name, role, now)
-            )
-            conn.commit()
-            
+        # Fallback to cloud_store
         try:
             from app.services.cloud_store import cloud_store
             if cloud_store.is_configured():
+                u = cloud_store.get(f"user_auth:{clean_email}")
+                if u and isinstance(u, dict) and u.get("password_hash"):
+                    # Cache into SQLite
+                    try:
+                        with self._get_connection() as conn:
+                            cursor = conn.cursor()
+                            cursor.execute(
+                                "INSERT OR REPLACE INTO users (id, email, password_hash, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                                (u["id"], u["email"], u["password_hash"], u.get("name", ""), u.get("role", "user"), u.get("created_at", ""))
+                            )
+                            conn.commit()
+                    except Exception:
+                        pass
+                    return u
+        except Exception:
+            pass
+
+        return None
+
+    def get_user_by_id(self, user_id: str):
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+                row = cursor.fetchone()
+                if row:
+                    return dict(row)
+        except Exception:
+            pass
+
+        try:
+            from app.services.cloud_store import cloud_store
+            if cloud_store.is_configured():
+                u = cloud_store.get(f"user_auth_id:{user_id}")
+                if u and isinstance(u, dict):
+                    try:
+                        with self._get_connection() as conn:
+                            cursor = conn.cursor()
+                            cursor.execute(
+                                "INSERT OR REPLACE INTO users (id, email, password_hash, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                                (u["id"], u["email"], u["password_hash"], u.get("name", ""), u.get("role", "user"), u.get("created_at", ""))
+                            )
+                            conn.commit()
+                    except Exception:
+                        pass
+                    return u
+        except Exception:
+            pass
+
+        return None
+
+    def register_user(self, email: str, password: str, name: str = "", role: str = "user") -> Dict[str, Any]:
+        clean_email = email.lower().strip()
+        existing_user = self.get_user_by_email(clean_email)
+        # If user exists and already has a valid password_hash, reject duplicate registration
+        if existing_user and existing_user.get("password_hash"):
+            raise HTTPException(status_code=400, detail="Email already registered")
+
+        import hashlib
+        user_id = hashlib.md5(clean_email.encode("utf-8")).hexdigest()
+        hashed_password = self.get_password_hash(password)
+        now = datetime.utcnow().isoformat()
+        clean_name = name.strip() if name else ""
+
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "INSERT OR REPLACE INTO users (id, email, password_hash, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (user_id, clean_email, hashed_password, clean_name, role, now)
+                )
+                conn.commit()
+        except Exception:
+            pass
+
+        user_record = {
+            "id": user_id,
+            "email": clean_email,
+            "password_hash": hashed_password,
+            "name": clean_name,
+            "role": role,
+            "created_at": now
+        }
+
+        try:
+            from app.services.cloud_store import cloud_store
+            if cloud_store.is_configured():
+                cloud_store.set(f"user_auth:{clean_email}", user_record)
+                cloud_store.set(f"user_auth_id:{user_id}", user_record)
                 reg_users = cloud_store.get("registered_users") or []
-                if not any(u.get("email") == email for u in reg_users):
-                    reg_users.append({
-                        "id": user_id,
-                        "email": email,
-                        "name": clean_name,
-                        "role": role,
-                        "created_at": now
-                    })
-                    cloud_store.set("registered_users", reg_users)
+                filtered_users = [u for u in reg_users if u.get("email") != clean_email]
+                filtered_users.append({
+                    "id": user_id,
+                    "email": clean_email,
+                    "name": clean_name,
+                    "role": role,
+                    "created_at": now
+                })
+                cloud_store.set("registered_users", filtered_users)
         except Exception:
             pass
 
         return {
             "id": user_id,
-            "email": email,
+            "email": clean_email,
             "name": clean_name,
             "role": role,
             "created_at": now
@@ -135,6 +206,8 @@ class AuthService:
     def authenticate_user(self, email: str, password: str):
         user = self.get_user_by_email(email)
         if not user:
+            return False
+        if not user.get("password_hash"):
             return False
         if not self.verify_password(password, user["password_hash"]):
             return False
