@@ -50,11 +50,14 @@ class VectorService:
         self, 
         query: str, 
         top_k: int = 4, 
-        doc_id: Optional[str] = None
+        doc_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        user_email: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Searches ChromaDB for chunks semantically relevant to the user query.
         Falls back to CloudStore chunks gracefully if Chroma collection is empty or fails.
+        Strictly restricts chunks to the authenticated user's own documents.
         """
         where_clause = {"doc_id": doc_id} if doc_id else None
         relevant_chunks = []
@@ -62,7 +65,7 @@ class VectorService:
         try:
             results = self.collection.query(
                 query_texts=[query],
-                n_results=top_k,
+                n_results=top_k * 2,
                 where=where_clause
             )
             if results and results.get("documents") and len(results["documents"]) > 0:
@@ -83,7 +86,7 @@ class VectorService:
         except Exception as e:
             print(f"[VectorService] Chroma query fallback: {e}")
 
-        # If Chroma returned 0 chunks, fallback to CloudStore stored chunks
+        # If Chroma returned 0 chunks, fallback to CloudStore stored chunks strictly for this user
         if not relevant_chunks:
             try:
                 from app.services.cloud_store import cloud_store
@@ -91,13 +94,18 @@ class VectorService:
                 if doc_id:
                     cloud_chunks = cloud_store.get(f"doc_chunks:{doc_id}")
                 else:
-                    # Search across all documents in metadata
+                    # Search across only THIS user's documents in metadata
                     meta_dict = cloud_store.get("documents_meta") or {}
                     all_chunks = []
-                    for did in list(meta_dict.keys())[:5]:
-                        c_list = cloud_store.get(f"doc_chunks:{did}")
-                        if c_list and isinstance(c_list, list):
-                            all_chunks.extend(c_list)
+                    for did, dinfo in meta_dict.items():
+                        is_my_doc = (
+                            (user_id and dinfo.get("user_id") == user_id)
+                            or (user_email and (dinfo.get("user_email") or "").lower() == user_email.lower())
+                        )
+                        if is_my_doc:
+                            c_list = cloud_store.get(f"doc_chunks:{did}")
+                            if c_list and isinstance(c_list, list):
+                                all_chunks.extend(c_list)
                     cloud_chunks = all_chunks
 
                 if cloud_chunks and isinstance(cloud_chunks, list):
@@ -119,7 +127,7 @@ class VectorService:
             except Exception as fb_err:
                 print(f"[VectorService] CloudStore search fallback error: {fb_err}")
 
-        return relevant_chunks
+        return relevant_chunks[:top_k]
 
     def get_document_chunks(self, doc_id: str, limit: int = 8) -> List[Dict[str, Any]]:
         """

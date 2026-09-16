@@ -474,18 +474,16 @@ async def list_documents(current_user = Depends(get_current_user)):
     
     current_user_id = current_user.get("id")
     current_user_email = (current_user.get("email") or "").lower().strip()
-    is_admin = current_user.get("role") == "admin"
     user_docs = []
     for doc_id, doc in all_meta.items():
         doc_user_id = doc.get("user_id")
         doc_user_email = (doc.get("user_email") or "").lower().strip()
 
-        # Match user by ID, or email, or show all to admin
+        # STRICT PER-USER ISOLATION:
+        # A user ONLY sees documents that they uploaded themselves (matching user_id or email).
         is_owner = (
             (doc_user_id and doc_user_id == current_user_id)
             or (current_user_email and doc_user_email == current_user_email)
-            or is_admin
-            or (not doc_user_id and not doc_user_email)
         )
         if is_owner:
             doc_data = dict(doc)

@@ -132,7 +132,7 @@ class SessionService:
                     sids = cloud_store.get(f"user_sessions:{user_id}") or []
                     for sid in sids:
                         s_data = cloud_store.get(f"session:{sid}")
-                        if s_data and isinstance(s_data, dict):
+                        if s_data and isinstance(s_data, dict) and s_data.get("user_id") == user_id:
                             sessions.append(s_data)
             except Exception:
                 pass

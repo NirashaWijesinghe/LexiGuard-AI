@@ -57,7 +57,9 @@ async def chat_with_documents(request: ChatRequest, current_user = Depends(get_c
         context_chunks = vector_service.query_relevant_chunks(
             query=query, 
             top_k=4, 
-            doc_id=request.doc_id
+            doc_id=request.doc_id,
+            user_id=current_user.get("id"),
+            user_email=current_user.get("email")
         )
     except Exception as ve:
         print(f"[ChatRoutes] Vector search warning: {ve}")
