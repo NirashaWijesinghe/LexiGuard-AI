@@ -255,6 +255,7 @@ async def upload_document(file: UploadFile = File(...), current_user = Depends(g
             "total_chunks": len(chunks),
             "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "user_id": current_user["id"],
+            "user_email": current_user.get("email", ""),
             "risk_score": risk_score,
             "risk_level": risk_level,
             "is_legal_contract": is_legal_contract,
@@ -333,6 +334,7 @@ async def upload_multiple_documents(files: list[UploadFile] = File(...), current
                 "total_chunks": len(chunks),
                 "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "user_id": current_user["id"],
+                "user_email": current_user.get("email", ""),
                 "risk_score": risk_score,
                 "risk_level": risk_level,
                 "is_legal_contract": is_legal_contract,
@@ -431,6 +433,7 @@ async def load_sample_contract(payload: dict, current_user = Depends(get_current
             "total_chunks": len(chunks),
             "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "user_id": current_user["id"],
+            "user_email": current_user.get("email", ""),
             "risk_score": risk_score,
             "risk_level": risk_level,
             "is_legal_contract": is_legal_contract,
@@ -461,11 +464,14 @@ async def list_documents(current_user = Depends(get_current_user)):
     hash_cache = _load_hash_cache()
     
     current_user_id = current_user.get("id")
+    current_user_email = current_user.get("email", "")
+    is_admin = current_user.get("role") == "admin"
     user_docs = []
     for doc_id, doc in all_meta.items():
         doc_user_id = doc.get("user_id")
-        # Strict user isolation: each user (including admin in their personal repo) only sees their own documents
-        if doc_user_id == current_user_id:
+        doc_user_email = doc.get("user_email", "")
+        # Isolated access by deterministic user_id, user_email, or full admin oversight
+        if is_admin or doc_user_id == current_user_id or (doc_user_email and doc_user_email == current_user_email):
             doc_data = dict(doc)
             file_path = settings.UPLOAD_PATH / doc.get("filename", "")
             content_hashes = _compute_document_hashes(file_path, [])
@@ -507,7 +513,10 @@ async def perform_contract_audit(doc_id: str, current_user = Depends(get_current
         raise HTTPException(status_code=404, detail="Document not found")
 
     doc_info = meta_dict[doc_id]
-    if doc_info.get("user_id") and doc_info.get("user_id") != current_user["id"]:
+    doc_user_id = doc_info.get("user_id")
+    doc_user_email = doc_info.get("user_email", "")
+    is_admin = current_user.get("role") == "admin"
+    if not is_admin and doc_user_id and doc_user_id != current_user["id"] and doc_user_email != current_user.get("email"):
         raise HTTPException(status_code=403, detail="Not authorized to access this document")
 
     chunks = vector_service.get_document_chunks(doc_id, limit=20)
