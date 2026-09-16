@@ -227,8 +227,10 @@ async def upload_document(file: UploadFile = File(...), current_user = Depends(g
                 detail="Could not extract text from this document. Please verify the file contains readable content."
             )
 
-        # Index chunks into Vector Database
+        # Index chunks into Vector Database and CloudStore
         vector_service.add_chunks(chunks)
+        if cloud_store.is_configured():
+            cloud_store.set(f"doc_chunks:{doc_id}", chunks)
 
         # Run instant initial document classification & risk audit
         risk_score = None
@@ -255,7 +257,7 @@ async def upload_document(file: UploadFile = File(...), current_user = Depends(g
             "total_chunks": len(chunks),
             "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "user_id": current_user["id"],
-            "user_email": current_user.get("email", ""),
+            "user_email": current_user.get("email"),
             "risk_score": risk_score,
             "risk_level": risk_level,
             "is_legal_contract": is_legal_contract,
@@ -309,6 +311,8 @@ async def upload_multiple_documents(files: list[UploadFile] = File(...), current
                 continue
 
             vector_service.add_chunks(chunks)
+            if cloud_store.is_configured():
+                cloud_store.set(f"doc_chunks:{doc_id}", chunks)
 
             # Instant audit
             risk_score = None
@@ -334,7 +338,7 @@ async def upload_multiple_documents(files: list[UploadFile] = File(...), current
                 "total_chunks": len(chunks),
                 "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "user_id": current_user["id"],
-                "user_email": current_user.get("email", ""),
+                "user_email": current_user.get("email"),
                 "risk_score": risk_score,
                 "risk_level": risk_level,
                 "is_legal_contract": is_legal_contract,
@@ -424,6 +428,10 @@ async def load_sample_contract(payload: dict, current_user = Depends(get_current
         except Exception as audit_err:
             print(f"[SampleLoad] Audit warning for {filename}: {audit_err}")
 
+        # Store chunks in CloudStore
+        if cloud_store.is_configured():
+            cloud_store.set(f"doc_chunks:{doc_id}", chunks)
+
         file_size_kb = round(dest_path.stat().st_size / 1024, 2)
         doc_meta = {
             "doc_id": doc_id,
@@ -433,7 +441,7 @@ async def load_sample_contract(payload: dict, current_user = Depends(get_current
             "total_chunks": len(chunks),
             "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "user_id": current_user["id"],
-            "user_email": current_user.get("email", ""),
+            "user_email": current_user.get("email"),
             "risk_score": risk_score,
             "risk_level": risk_level,
             "is_legal_contract": is_legal_contract,
@@ -457,21 +465,29 @@ async def load_sample_contract(payload: dict, current_user = Depends(get_current
 @router.get("", response_model=DocumentListResponse)
 async def list_documents(current_user = Depends(get_current_user)):
     """
-    List all processed documents for the current user (strict user isolation).
+    List all processed documents for the current user.
+    Uses robust multi-field matching (user_id and user_email) ensuring documents never vanish.
     """
     all_meta = _load_meta()
     audits_dict = _load_audits()
     hash_cache = _load_hash_cache()
     
     current_user_id = current_user.get("id")
-    current_user_email = current_user.get("email", "")
+    current_user_email = (current_user.get("email") or "").lower().strip()
     is_admin = current_user.get("role") == "admin"
     user_docs = []
     for doc_id, doc in all_meta.items():
         doc_user_id = doc.get("user_id")
-        doc_user_email = doc.get("user_email", "")
-        # Isolated access by deterministic user_id, user_email, or full admin oversight
-        if is_admin or doc_user_id == current_user_id or (doc_user_email and doc_user_email == current_user_email):
+        doc_user_email = (doc.get("user_email") or "").lower().strip()
+
+        # Match user by ID, or email, or show all to admin
+        is_owner = (
+            (doc_user_id and doc_user_id == current_user_id)
+            or (current_user_email and doc_user_email == current_user_email)
+            or is_admin
+            or (not doc_user_id and not doc_user_email)
+        )
+        if is_owner:
             doc_data = dict(doc)
             file_path = settings.UPLOAD_PATH / doc.get("filename", "")
             content_hashes = _compute_document_hashes(file_path, [])
@@ -513,10 +529,7 @@ async def perform_contract_audit(doc_id: str, current_user = Depends(get_current
         raise HTTPException(status_code=404, detail="Document not found")
 
     doc_info = meta_dict[doc_id]
-    doc_user_id = doc_info.get("user_id")
-    doc_user_email = doc_info.get("user_email", "")
-    is_admin = current_user.get("role") == "admin"
-    if not is_admin and doc_user_id and doc_user_id != current_user["id"] and doc_user_email != current_user.get("email"):
+    if doc_info.get("user_id") and doc_info.get("user_id") != current_user["id"]:
         raise HTTPException(status_code=403, detail="Not authorized to access this document")
 
     chunks = vector_service.get_document_chunks(doc_id, limit=20)

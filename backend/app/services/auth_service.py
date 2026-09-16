@@ -94,7 +94,8 @@ class AuthService:
         if existing_user:
             raise HTTPException(status_code=400, detail="Email already registered")
         
-        user_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"user:{email.lower().strip()}"))
+        import hashlib
+        user_id = hashlib.md5(email.lower().strip().encode("utf-8")).hexdigest()
         hashed_password = self.get_password_hash(password)
         now = datetime.utcnow().isoformat()
         clean_name = name.strip() if name else ""
