@@ -145,6 +145,16 @@ export default function DashboardPage() {
     setActiveTab("copilot");
   };
 
+  const handleSelectDoc = (docId: string | null) => {
+    setSelectedDocId(docId);
+    if (docId) {
+      const matchingSession = sessions.find((s) => s.doc_id === docId);
+      setActiveSessionId(matchingSession ? matchingSession.id : null);
+    } else {
+      setActiveSessionId(null);
+    }
+  };
+
   const handleNewChat = () => {
     setActiveSessionId(null);
     setActiveTab("copilot");
@@ -385,14 +395,14 @@ export default function DashboardPage() {
           <ContractAuditView
             selectedDoc={selectedDoc}
             documents={documents}
-            onSelectDoc={(id) => setSelectedDocId(id)}
+            onSelectDoc={(id) => handleSelectDoc(id)}
             onAuditComplete={handleAuditComplete}
             onAskCopilot={(prompt) => {
               if (prompt) setPendingCopilotPrompt(prompt);
               setActiveTab("copilot");
             }}
             onNavigateToCopilot={(docId) => {
-              if (docId) setSelectedDocId(docId);
+              if (docId) handleSelectDoc(docId);
               setActiveTab("copilot");
             }}
           />
@@ -403,10 +413,10 @@ export default function DashboardPage() {
             <ChatInterface
               documents={documents}
               selectedDocId={selectedDocId}
-              setSelectedDocId={setSelectedDocId}
+              setSelectedDocId={handleSelectDoc}
               onUploadDocSuccess={(newDoc) => {
                 setDocuments((prev) => [newDoc, ...prev]);
-                setSelectedDocId(newDoc.doc_id);
+                handleSelectDoc(newDoc.doc_id);
               }}
               triggerSummaryDocId={triggerSummaryDocId}
               onResetTriggerSummary={() => setTriggerSummaryDocId(null)}
@@ -427,18 +437,18 @@ export default function DashboardPage() {
           <RepositoryView
             documents={documents}
             onSelectDocForAudit={(docId) => {
-              setSelectedDocId(docId);
+              handleSelectDoc(docId);
               setActiveTab("auditor");
             }}
             onSelectDocForCopilot={(docId) => {
-              setSelectedDocId(docId);
+              handleSelectDoc(docId);
               setActiveTab("copilot");
             }}
             onDeleteSuccess={(deletedId) => {
               setDocuments((prev) => prev.filter((d) => d.doc_id !== deletedId));
               if (selectedDocId === deletedId) {
                 const remaining = documents.filter((d) => d.doc_id !== deletedId);
-                setSelectedDocId(remaining.length > 0 ? remaining[0].doc_id : null);
+                handleSelectDoc(remaining.length > 0 ? remaining[0].doc_id : null);
               }
             }}
             onNavigateToOverview={() => setActiveTab("overview")}

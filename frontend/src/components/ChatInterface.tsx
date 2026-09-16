@@ -139,6 +139,35 @@ export default function ChatInterface({
     }
   }, [activeSessionId]);
 
+  // Reset or switch session when selected document changes
+  const prevDocIdRef = useRef<string | null>(selectedDocId);
+  useEffect(() => {
+    if (prevDocIdRef.current !== selectedDocId) {
+      prevDocIdRef.current = selectedDocId;
+      // If current active session belongs to a different document, switch or reset it
+      const currentSession = sessions.find(s => s.id === activeSessionId);
+      if (currentSession && currentSession.doc_id !== selectedDocId) {
+        const matchingSession = selectedDocId ? sessions.find(s => s.doc_id === selectedDocId) : null;
+        if (matchingSession) {
+          setActiveSessionId(matchingSession.id);
+        } else {
+          setActiveSessionId(null);
+          setMessages([]);
+        }
+      } else if (!activeSessionId && selectedDocId) {
+        const matchingSession = sessions.find(s => s.doc_id === selectedDocId);
+        if (matchingSession) {
+          setActiveSessionId(matchingSession.id);
+        } else {
+          setMessages([]);
+        }
+      } else if (!selectedDocId) {
+        setActiveSessionId(null);
+        setMessages([]);
+      }
+    }
+  }, [selectedDocId, activeSessionId, sessions, setActiveSessionId]);
+
   // Handle external trigger for document summarization
   useEffect(() => {
     if (triggerSummaryDocId) {
