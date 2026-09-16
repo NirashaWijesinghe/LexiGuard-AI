@@ -45,7 +45,7 @@ async def delete_session(session_id: str, current_user = Depends(get_current_use
     if not session or session.get("user_id") != current_user["id"]:
         raise HTTPException(status_code=404, detail="Session not found")
         
-    deleted = session_service.delete_session(session_id)
+    deleted = session_service.delete_session(session_id, user_id=current_user["id"])
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"success": True, "message": "Session deleted successfully"}

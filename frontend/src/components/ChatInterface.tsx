@@ -119,54 +119,69 @@ export default function ChatInterface({
 
   // Load session messages when activeSessionId changes
   useEffect(() => {
+    let isCancelled = false;
     if (activeSessionId) {
       const loadSessionMessages = async () => {
         setIsLoading(true);
         try {
           const detail = await fetchSessionDetail(activeSessionId);
-          if (detail && detail.messages) {
-            setMessages(detail.messages);
+          if (!isCancelled) {
+            if (detail && detail.messages) {
+              // Safety validation: if this session is tied to a doc, make sure it matches selectedDocId!
+              if (selectedDocId && detail.session?.doc_id && detail.session.doc_id !== selectedDocId) {
+                console.warn("[ChatInterface] Session doc_id mismatch with selected doc, clearing messages");
+                setActiveSessionId(null);
+                setMessages([]);
+              } else {
+                setMessages(detail.messages);
+              }
+            } else {
+              setMessages([]);
+            }
           }
         } catch (error) {
           console.error("Failed to load session messages", error);
+          if (!isCancelled) setMessages([]);
         } finally {
-          setIsLoading(false);
+          if (!isCancelled) setIsLoading(false);
         }
       };
       loadSessionMessages();
     } else {
       setMessages([]);
     }
-  }, [activeSessionId]);
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeSessionId, selectedDocId, setActiveSessionId]);
 
-  // Reset or switch session when selected document changes
-  const prevDocIdRef = useRef<string | null>(selectedDocId);
+  // Synchronize or reset session when selected document changes
   useEffect(() => {
-    if (prevDocIdRef.current !== selectedDocId) {
-      prevDocIdRef.current = selectedDocId;
-      // If current active session belongs to a different document, switch or reset it
-      const currentSession = sessions.find(s => s.id === activeSessionId);
-      if (currentSession && currentSession.doc_id !== selectedDocId) {
-        const matchingSession = selectedDocId ? sessions.find(s => s.doc_id === selectedDocId) : null;
-        if (matchingSession) {
+    if (selectedDocId) {
+      // Find matching session for this selected document
+      const matchingSession = sessions.find((s) => s.doc_id === selectedDocId);
+      if (matchingSession) {
+        if (activeSessionId !== matchingSession.id) {
           setActiveSessionId(matchingSession.id);
-        } else {
+        }
+      } else {
+        // No session exists for this document yet -> reset active session & clear chat messages
+        if (activeSessionId !== null) {
+          setActiveSessionId(null);
+        }
+        setMessages([]);
+      }
+    } else {
+      // All Documents mode: if current session was tied to a specific doc, clear it
+      if (activeSessionId) {
+        const cur = sessions.find((s) => s.id === activeSessionId);
+        if (cur?.doc_id) {
           setActiveSessionId(null);
           setMessages([]);
         }
-      } else if (!activeSessionId && selectedDocId) {
-        const matchingSession = sessions.find(s => s.doc_id === selectedDocId);
-        if (matchingSession) {
-          setActiveSessionId(matchingSession.id);
-        } else {
-          setMessages([]);
-        }
-      } else if (!selectedDocId) {
-        setActiveSessionId(null);
-        setMessages([]);
       }
     }
-  }, [selectedDocId, activeSessionId, sessions, setActiveSessionId]);
+  }, [selectedDocId, sessions, activeSessionId, setActiveSessionId]);
 
   // Handle external trigger for document summarization
   useEffect(() => {
@@ -499,8 +514,37 @@ export default function ChatInterface({
                 {currentActiveSession ? currentActiveSession.title : "LexiGuard Legal Copilot"}
               </h3>
             </div>
-            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 truncate">
-              {selectedDoc ? (
+            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+              {documents.length > 1 ? (
+                <div className="flex items-center gap-1.5">
+                  <select
+                    value={selectedDocId || ""}
+                    onChange={(e) => {
+                      const val = e.target.value || null;
+                      if (setSelectedDocId) setSelectedDocId(val);
+                    }}
+                    className="bg-slate-100 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-indigo-700 dark:text-sky-300 rounded-lg px-2 py-0.5 focus:outline-none focus:border-indigo-500 cursor-pointer max-w-[210px] sm:max-w-xs truncate shadow-2xs"
+                  >
+                    <option value="">🌐 All Contracts (Global)</option>
+                    {documents.map((d) => (
+                      <option key={d.doc_id} value={d.doc_id}>
+                        📄 {d.filename}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedDocId && setSelectedDocId && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDocId(null)}
+                      className="inline-flex items-center gap-1 text-[10px] text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 bg-slate-200/70 dark:bg-slate-800/80 px-1.5 py-0.5 rounded transition-colors cursor-pointer shrink-0"
+                      title="Clear to search across all documents"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                      <span>All Docs</span>
+                    </button>
+                  )}
+                </div>
+              ) : selectedDoc ? (
                 <>
                   <span className="text-indigo-600 dark:text-sky-400 font-medium truncate">
                     Contract: {selectedDoc.filename}
@@ -588,6 +632,7 @@ export default function ChatInterface({
                   ) : (
                     sessions.map((sess) => {
                       const isActive = activeSessionId === sess.id;
+                      const sessDoc = sess.doc_id ? documents.find((d) => d.doc_id === sess.doc_id) : null;
                       return (
                         <div
                           key={sess.id}
@@ -609,6 +654,14 @@ export default function ChatInterface({
                                 <span>{new Date(sess.updated_at || sess.created_at).toLocaleDateString()}</span>
                                 <span>•</span>
                                 <span>{sess.message_count ?? 0} msgs</span>
+                                {sessDoc && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-indigo-600 dark:text-sky-400 font-medium truncate max-w-[110px]">
+                                      {sessDoc.filename}
+                                    </span>
+                                  </>
+                                )}
                               </div>
                             </div>
                           </div>

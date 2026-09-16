@@ -24,8 +24,18 @@ async def chat_with_documents(request: ChatRequest, current_user = Depends(get_c
     if not query:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
-    # 1. Ensure or create session safely
+    # 1. Ensure or create session safely with strict document-level isolation
     session_id = request.session_id
+    if session_id:
+        existing_session = session_service.get_session(session_id)
+        if existing_session:
+            existing_doc = existing_session.get("doc_id")
+            # If the session belongs to a different document, create a new isolated session!
+            if request.doc_id and existing_doc and existing_doc != request.doc_id:
+                session_id = None
+        else:
+            session_id = None
+
     if not session_id:
         try:
             title = query[:45] + "..." if len(query) > 45 else query
@@ -47,7 +57,8 @@ async def chat_with_documents(request: ChatRequest, current_user = Depends(get_c
             role="user",
             content=query,
             user_id=current_user["id"],
-            timestamp=user_ts
+            timestamp=user_ts,
+            doc_id=request.doc_id
         )
     except Exception as me:
         print(f"[ChatRoutes] User message save warning: {me}")
@@ -102,7 +113,8 @@ async def chat_with_documents(request: ChatRequest, current_user = Depends(get_c
             content=ai_answer,
             user_id=current_user["id"],
             sources=citations_data,
-            timestamp=ai_ts
+            timestamp=ai_ts,
+            doc_id=request.doc_id
         )
     except Exception as me2:
         print(f"[ChatRoutes] Assistant message save warning: {me2}")

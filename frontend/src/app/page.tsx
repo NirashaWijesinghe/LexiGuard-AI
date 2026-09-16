@@ -141,6 +141,8 @@ export default function DashboardPage() {
     const session = sessions.find((s) => s.id === sessionId);
     if (session && session.doc_id) {
       setSelectedDocId(session.doc_id);
+    } else {
+      setSelectedDocId(null);
     }
     setActiveTab("copilot");
   };
@@ -153,6 +155,18 @@ export default function DashboardPage() {
     } else {
       setActiveSessionId(null);
     }
+  };
+
+  const handleOpenCopilot = (docId?: string | null) => {
+    const targetDocId = docId !== undefined ? docId : selectedDocId;
+    if (targetDocId) {
+      setSelectedDocId(targetDocId);
+      const matching = sessions.find((s) => s.doc_id === targetDocId);
+      setActiveSessionId(matching ? matching.id : null);
+    } else {
+      setActiveSessionId(null);
+    }
+    setActiveTab("copilot");
   };
 
   const handleNewChat = () => {
@@ -234,7 +248,7 @@ export default function DashboardPage() {
             </button>
 
             <button
-              onClick={() => setActiveTab("copilot")}
+              onClick={() => handleOpenCopilot()}
               className={`flex items-center gap-2 py-2 px-3.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                 activeTab === "copilot"
                   ? "bg-white dark:bg-gradient-to-r dark:from-indigo-900/90 dark:to-slate-800 text-indigo-700 dark:text-indigo-200 border border-slate-200 dark:border-indigo-500/40 shadow-xs"
@@ -368,24 +382,23 @@ export default function DashboardPage() {
             documents={documents}
             onUploadSuccess={(newDoc) => {
               setDocuments((prev) => [newDoc, ...prev]);
-              setSelectedDocId(newDoc.doc_id);
+              handleSelectDoc(newDoc.doc_id);
               setActiveTab("auditor");
             }}
             onBatchUploadSuccess={(newDocs) => {
               setDocuments((prev) => [...newDocs, ...prev]);
               if (newDocs.length > 0) {
-                setSelectedDocId(newDocs[0].doc_id);
+                handleSelectDoc(newDocs[0].doc_id);
                 setActiveTab("auditor");
               }
             }}
             onNavigateToAudit={(docId) => {
-              setSelectedDocId(docId);
+              handleSelectDoc(docId);
               setActiveTab("auditor");
             }}
             onNavigateToCopilot={(docId, prompt) => {
-              if (docId) setSelectedDocId(docId);
+              handleOpenCopilot(docId);
               if (prompt) setPendingCopilotPrompt(prompt);
-              setActiveTab("copilot");
             }}
             onNavigateToRepository={() => setActiveTab("repository")}
           />
@@ -398,12 +411,11 @@ export default function DashboardPage() {
             onSelectDoc={(id) => handleSelectDoc(id)}
             onAuditComplete={handleAuditComplete}
             onAskCopilot={(prompt) => {
+              if (selectedDoc) handleOpenCopilot(selectedDoc.doc_id);
               if (prompt) setPendingCopilotPrompt(prompt);
-              setActiveTab("copilot");
             }}
             onNavigateToCopilot={(docId) => {
-              if (docId) handleSelectDoc(docId);
-              setActiveTab("copilot");
+              handleOpenCopilot(docId || selectedDoc?.doc_id);
             }}
           />
         )}
@@ -441,8 +453,7 @@ export default function DashboardPage() {
               setActiveTab("auditor");
             }}
             onSelectDocForCopilot={(docId) => {
-              handleSelectDoc(docId);
-              setActiveTab("copilot");
+              handleOpenCopilot(docId);
             }}
             onDeleteSuccess={(deletedId) => {
               setDocuments((prev) => prev.filter((d) => d.doc_id !== deletedId));

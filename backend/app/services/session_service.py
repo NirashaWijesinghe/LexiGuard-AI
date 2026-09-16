@@ -102,6 +102,25 @@ class SessionService:
 
     def list_sessions(self, user_id: str) -> List[Dict[str, Any]]:
         sessions = []
+        # Priority 1: Check CloudStore (persistent across serverless instances)
+        try:
+            from app.services.cloud_store import cloud_store
+            if cloud_store.is_configured():
+                sids = cloud_store.get(f"user_sessions:{user_id}") or []
+                cloud_sessions = []
+                for sid in sids:
+                    s_data = cloud_store.get(f"session:{sid}")
+                    if s_data and isinstance(s_data, dict) and s_data.get("user_id") == user_id:
+                        msgs = cloud_store.get(f"session_msgs:{sid}")
+                        if msgs and isinstance(msgs, list):
+                            s_data["message_count"] = len(msgs)
+                        cloud_sessions.append(s_data)
+                if cloud_sessions:
+                    return cloud_sessions
+        except Exception as ce:
+            print(f"[SessionService] CloudStore list error: {ce}")
+
+        # Priority 2: Fallback to SQLite
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -125,21 +144,20 @@ class SessionService:
         except Exception as e:
             print(f"[SessionService] SQLite list error: {e}")
 
-        if not sessions:
-            try:
-                from app.services.cloud_store import cloud_store
-                if cloud_store.is_configured():
-                    sids = cloud_store.get(f"user_sessions:{user_id}") or []
-                    for sid in sids:
-                        s_data = cloud_store.get(f"session:{sid}")
-                        if s_data and isinstance(s_data, dict) and s_data.get("user_id") == user_id:
-                            sessions.append(s_data)
-            except Exception:
-                pass
-
         return sessions
 
     def get_session_messages(self, session_id: str) -> List[Dict[str, Any]]:
+        # Priority 1: Check CloudStore
+        try:
+            from app.services.cloud_store import cloud_store
+            if cloud_store.is_configured():
+                cloud_msgs = cloud_store.get(f"session_msgs:{session_id}")
+                if cloud_msgs and isinstance(cloud_msgs, list):
+                    return cloud_msgs
+        except Exception:
+            pass
+
+        # Priority 2: Fallback to SQLite
         messages = []
         try:
             with self._get_connection() as conn:
@@ -162,16 +180,6 @@ class SessionService:
         except Exception as e:
             print(f"[SessionService] SQLite messages error: {e}")
 
-        if not messages:
-            try:
-                from app.services.cloud_store import cloud_store
-                if cloud_store.is_configured():
-                    cloud_msgs = cloud_store.get(f"session_msgs:{session_id}")
-                    if cloud_msgs and isinstance(cloud_msgs, list):
-                        return cloud_msgs
-            except Exception:
-                pass
-
         return messages
 
     def add_message(
@@ -182,28 +190,43 @@ class SessionService:
         user_id: Optional[str] = None,
         sources: Optional[List[Dict[str, Any]]] = None,
         timestamp: Optional[str] = None,
-        msg_id: Optional[str] = None
+        msg_id: Optional[str] = None,
+        doc_id: Optional[str] = None
     ) -> Dict[str, Any]:
         mid = msg_id or str(uuid.uuid4())
         now = datetime.utcnow().isoformat()
         ts = timestamp or datetime.now().strftime("%I:%M %p")
         sources_str = json.dumps(sources) if sources else None
 
+        # Check existing session before recreating
+        existing_sess = self.get_session(session_id)
+        if not existing_sess:
+            safe_uid = user_id or "default_user"
+            title = content[:40] + "..." if len(content) > 40 else content
+            self.create_session(user_id=safe_uid, title=title, doc_id=doc_id, session_id=session_id)
+        elif doc_id and not existing_sess.get("doc_id"):
+            try:
+                with self._get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("UPDATE chat_sessions SET doc_id = ? WHERE id = ?", (doc_id, session_id))
+                    conn.commit()
+            except Exception:
+                pass
+            try:
+                from app.services.cloud_store import cloud_store
+                if cloud_store.is_configured():
+                    existing_sess["doc_id"] = doc_id
+                    cloud_store.set(f"session:{session_id}", existing_sess)
+            except Exception:
+                pass
+
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                # Ensure session exists
-                cursor.execute("SELECT id FROM chat_sessions WHERE id = ?", (session_id,))
-                if not cursor.fetchone():
-                    safe_uid = user_id or "default_user"
-                    title = content[:40] + "..." if len(content) > 40 else content
-                    self.create_session(user_id=safe_uid, title=title, session_id=session_id)
-
                 cursor.execute(
                     "INSERT INTO chat_messages (id, session_id, role, content, sources_json, timestamp, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (mid, session_id, role, content, sources_str, ts, now)
                 )
-                # Update session's updated_at
                 cursor.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", (now, session_id))
                 conn.commit()
         except Exception as e:
@@ -225,6 +248,13 @@ class SessionService:
                 msgs = cloud_store.get(f"session_msgs:{session_id}") or []
                 msgs.append(msg_obj)
                 cloud_store.set(f"session_msgs:{session_id}", msgs)
+                sess = cloud_store.get(f"session:{session_id}")
+                if sess and isinstance(sess, dict):
+                    sess["updated_at"] = now
+                    sess["message_count"] = len(msgs)
+                    if doc_id and not sess.get("doc_id"):
+                        sess["doc_id"] = doc_id
+                    cloud_store.set(f"session:{session_id}", sess)
         except Exception:
             pass
 
@@ -237,12 +267,32 @@ class SessionService:
             conn.commit()
             return cursor.rowcount > 0
 
-    def delete_session(self, session_id: str) -> bool:
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM chat_messages WHERE session_id = ?", (session_id,))
-            cursor.execute("DELETE FROM chat_sessions WHERE id = ?", (session_id,))
-            conn.commit()
-            return cursor.rowcount > 0
+    def delete_session(self, session_id: str, user_id: Optional[str] = None) -> bool:
+        success = False
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM chat_messages WHERE session_id = ?", (session_id,))
+                cursor.execute("DELETE FROM chat_sessions WHERE id = ?", (session_id,))
+                conn.commit()
+                success = cursor.rowcount > 0
+        except Exception as e:
+            print(f"[SessionService] SQLite delete error: {e}")
+
+        try:
+            from app.services.cloud_store import cloud_store
+            if cloud_store.is_configured():
+                cloud_store.delete(f"session:{session_id}")
+                cloud_store.delete(f"session_msgs:{session_id}")
+                if user_id:
+                    sids = cloud_store.get(f"user_sessions:{user_id}") or []
+                    if session_id in sids:
+                        sids.remove(session_id)
+                        cloud_store.set(f"user_sessions:{user_id}", sids)
+                success = True
+        except Exception:
+            pass
+
+        return success
 
 session_service = SessionService()
