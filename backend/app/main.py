@@ -25,16 +25,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.middleware("http")
-async def vercel_path_fix_middleware(request: Request, call_next):
-    # If deployed on Vercel, restore original requested path from x-matched-path header
-    matched = request.headers.get("x-matched-path")
-    if matched and not matched.startswith("/api/index") and matched != "/main.py":
-        raw_path = matched.split("?")[0]
-        request.scope["path"] = raw_path
-
-    response = await call_next(request)
-    return response
 
 @app.get("/ping")
 def ping():
