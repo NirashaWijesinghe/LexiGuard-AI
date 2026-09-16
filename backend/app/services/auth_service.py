@@ -9,7 +9,11 @@ import jwt
 from fastapi import HTTPException, status
 from app.config import settings
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "chat_history.db")
+if os.environ.get("VERCEL"):
+    DB_PATH = "/tmp/chat_history.db"
+else:
+    DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "chat_history.db")
+
 SECRET_KEY = settings.GOOGLE_API_KEY if settings.GOOGLE_API_KEY else "super-secret-key-for-dev"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 days
@@ -42,6 +46,15 @@ class AuthService:
             except Exception:
                 pass
             conn.commit()
+
+        # Seed default users if empty
+        try:
+            if not self.get_user_by_email("admin@gmail.com"):
+                self.register_user("admin@gmail.com", "admin123", name="System Administrator", role="admin")
+            if not self.get_user_by_email("nirasha@gmail.com"):
+                self.register_user("nirasha@gmail.com", "nirasha123", name="Nirasha Wijesinghe", role="user")
+        except Exception:
+            pass
 
     def get_password_hash(self, password: str) -> str:
         salt = bcrypt.gensalt()

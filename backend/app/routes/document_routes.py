@@ -24,8 +24,12 @@ router = APIRouter(prefix="/api/documents", tags=["Documents"])
 # Metadata storage file
 META_FILE = settings.UPLOAD_PATH / "documents_meta.json"
 AUDIT_FILE = settings.UPLOAD_PATH / "contracts_audit.json"
-CACHE_FILE = settings.UPLOAD_PATH / "audit_hash_cache.json"
-SAMPLE_CONTRACTS_DIR = Path(__file__).resolve().parents[3] / "sample_contracts"
+_candidate_sample_dirs = [
+    Path(__file__).resolve().parent.parent.parent / "sample_contracts",
+    Path(__file__).resolve().parent.parent / "sample_contracts",
+    Path("sample_contracts"),
+]
+SAMPLE_CONTRACTS_DIR = next((p for p in _candidate_sample_dirs if p.exists()), _candidate_sample_dirs[0])
 
 SAMPLE_CATALOG = [
     {

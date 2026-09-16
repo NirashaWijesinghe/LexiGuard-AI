@@ -5,7 +5,10 @@ import os
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "chat_history.db")
+if os.environ.get("VERCEL"):
+    DB_PATH = "/tmp/chat_history.db"
+else:
+    DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "chat_history.db")
 
 class SessionService:
     def __init__(self, db_path: str = DB_PATH):

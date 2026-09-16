@@ -4,12 +4,17 @@ from dotenv import load_dotenv
 
 # Base directory paths
 BASE_DIR = Path(__file__).resolve().parent.parent
-UPLOAD_DIR = BASE_DIR / "uploads"
-CHROMA_PERSIST_DIR = BASE_DIR / "chroma_db"
+
+if os.environ.get("VERCEL"):
+    UPLOAD_DIR = Path("/tmp/uploads")
+    CHROMA_PERSIST_DIR = Path("/tmp/chroma_db")
+else:
+    UPLOAD_DIR = BASE_DIR / "uploads"
+    CHROMA_PERSIST_DIR = BASE_DIR / "chroma_db"
 
 # Ensure runtime directories exist
-UPLOAD_DIR.mkdir(exist_ok=True)
-CHROMA_PERSIST_DIR.mkdir(exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+CHROMA_PERSIST_DIR.mkdir(parents=True, exist_ok=True)
 
 # Load environment variables from .env file
 load_dotenv(BASE_DIR / ".env")
