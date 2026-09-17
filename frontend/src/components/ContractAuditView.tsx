@@ -948,7 +948,10 @@ export default function ContractAuditView({
                           {onAskCopilot && (
                             <div className="flex justify-end pt-1">
                               <button
-                                onClick={() => onAskCopilot(`How should I negotiate or redline the '${risk.clause_title}' clause on Page ${risk.page_number}?`)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onAskCopilot(`How should I negotiate or redline the '${risk.clause_title}' clause on Page ${risk.page_number}?`);
+                                }}
                                 className="text-xs text-sky-600 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-300 flex items-center gap-1 font-semibold transition-colors cursor-pointer"
                               >
                                 <span>Draft negotiation strategy for this clause</span>

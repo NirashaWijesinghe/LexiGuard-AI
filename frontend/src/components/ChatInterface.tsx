@@ -183,19 +183,29 @@ export default function ChatInterface({
     }
   }, [selectedDocId, sessions, activeSessionId, setActiveSessionId]);
 
-  // Handle external trigger for document summarization
+  // Handle external trigger for document summarization (guarded against double execution)
+  const lastProcessedSummaryRef = useRef<string | null>(null);
   useEffect(() => {
     if (triggerSummaryDocId) {
+      if (lastProcessedSummaryRef.current === triggerSummaryDocId) return;
+      lastProcessedSummaryRef.current = triggerSummaryDocId;
       handleAutoSummarize(triggerSummaryDocId);
       if (onResetTriggerSummary) onResetTriggerSummary();
+    } else {
+      lastProcessedSummaryRef.current = null;
     }
   }, [triggerSummaryDocId]);
 
-  // Handle external trigger for custom prompt (e.g. Draft negotiation strategy)
+  // Handle external trigger for custom prompt (e.g. Draft negotiation strategy) - strictly guarded against duplicate execution
+  const lastProcessedPromptRef = useRef<string | null>(null);
   useEffect(() => {
     if (pendingPrompt) {
+      if (lastProcessedPromptRef.current === pendingPrompt) return;
+      lastProcessedPromptRef.current = pendingPrompt;
       handleSend(pendingPrompt);
       if (onClearPendingPrompt) onClearPendingPrompt();
+    } else {
+      lastProcessedPromptRef.current = null;
     }
   }, [pendingPrompt]);
 
