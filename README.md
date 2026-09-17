@@ -23,15 +23,7 @@ The platform calculates an automated **Contract Risk Score (0–100)**, flags ha
 | **Backend REST API** | [https://lexi-guard-api.vercel.app](https://lexi-guard-api.vercel.app) | FastAPI serverless deployment |
 | **Interactive API Docs** | [https://lexi-guard-api.vercel.app/docs](https://lexi-guard-api.vercel.app/docs) | Swagger OpenAPI specification |
 
-### 🔑 Instant Demo Credentials
-
-You can test the live application immediately using the pre-configured accounts below, or register a new account on the [Sign Up page](https://lexi-guard-ai.vercel.app/register):
-
-| Role | Email | Password | Access Level |
-| :--- | :--- | :--- | :--- |
-| **System Admin** | `admin@gmail.com` | `admin123` | Full access + Enterprise Admin Console & System Metrics |
-| **Legal Analyst** | `nirasha@gmail.com` | `admin123` | Dedicated contract workspace, audit reports, isolated copilot |
-| **Standard User** | `kasun@gmail.com` | `admin123` | Clean user sandbox |
+> 💡 **Try it live:** Create a free account in seconds on the [Sign Up page](https://lexi-guard-ai.vercel.app/register) to audit contracts and explore the Legal Copilot.
 
 ---
 
