@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4338ca" />
+      <stop offset="50%" stop-color="#3b82f6" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#e0e7ff" />
+    </linearGradient>
+    <linearGradient id="scaleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#818cf8" />
+    </linearGradient>
+  </defs>
+
+  <!-- High-contrast Solid Outer Shield Background -->
+  <path d="M32 4 C44 4 56 10 56 22 C56 42 38 56 32 60 C26 56 8 42 8 22 C8 10 20 4 32 4 Z" fill="url(#shieldGrad)" />
+  
+  <!-- Subtle Sleek Inner Border -->
+  <path d="M32 7 C42 7 53 12.5 53 23 C53 40.5 37 53 32 56.5 C27 53 11 40.5 11 23 C11 12.5 22 7 32 7 Z" stroke="#a5b4fc" stroke-width="1.5" stroke-opacity="0.6" fill="none" />
+
+  <!-- Legal Scale Pillar & Base -->
+  <path d="M32 17 V43 M26 43 H38" stroke="url(#accentGrad)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+  
+  <!-- Top Crossbeam -->
+  <path d="M18 23 L32 20 L46 23" stroke="url(#accentGrad)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+  
+  <!-- Central Finial Point -->
+  <circle cx="32" cy="18" r="2.2" fill="#ffffff" />
+  
+  <!-- Left Pan Strings & Scale Pan -->
+  <path d="M18 23 L14 33 M18 23 L22 33" stroke="#e0f2fe" stroke-width="1.8" stroke-linecap="round" />
+  <path d="M13 33 Q18 38 23 33 Z" fill="url(#scaleGrad)" stroke="#ffffff" stroke-width="1.2" />
+
+  <!-- Right Pan Strings & Scale Pan -->
+  <path d="M46 23 L42 33 M46 23 L50 33" stroke="#e0f2fe" stroke-width="1.8" stroke-linecap="round" />
+  <path d="M41 33 Q46 38 51 33 Z" fill="url(#scaleGrad)" stroke="#ffffff" stroke-width="1.2" />
+</svg>

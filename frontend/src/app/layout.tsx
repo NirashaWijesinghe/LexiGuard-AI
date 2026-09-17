@@ -17,8 +17,15 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LexiGuard AI ⚖️🛡️ | Enterprise Legal Contract Intelligence & Risk Auditor",
-  description: "AI-Powered Legal Contract Risk Scoring, Redline Analysis, Missing Clause Auditing, and Grounded Legal Copilot.",
+  title: "LexiGuard AI — Legal Intelligence",
+  description: "Enterprise AI-Powered Legal Contract Risk Scoring, Redline Analysis, Missing Clause Auditing, and Grounded Legal Copilot.",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({
